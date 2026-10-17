@@ -1,7 +1,7 @@
 // Discover: new releases and charts from JioSaavn, Apple Music and Deezer,
 // filtered by language and genre. Songs keep each catalogue's official
 // artwork and metadata; playback picks the best source per song.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DISCOVER_GENRES, DISCOVER_LANGUAGES, getDiscover, type DiscoverTrack } from '../../lib/discover';
 import { useCached, useSettings } from '../hooks';
 import { playQueue, TrackRow } from './Items';
@@ -41,6 +41,46 @@ function Block({ title, sub, tracks, ctx, withDate, ranked, initial = 8 }: { tit
   );
 }
 
+// Genre filter: one row that scrolls sideways. A mouse wheel scrolls it too (most
+// desktop mice have no horizontal wheel), arrow keys move between genres, and the
+// chosen genre is kept in view.
+function GenreChips({ genre, onPick }: { genre: string; onPick: (id: string) => void }) {
+  const row = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      if (e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY) || el.scrollWidth <= el.clientWidth) return;
+      const max = el.scrollWidth - el.clientWidth;
+      // At either end, let the page scroll on as usual.
+      if ((e.deltaY < 0 && el.scrollLeft <= 0) || (e.deltaY > 0 && el.scrollLeft >= max - 1)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', wheel, { passive: false });
+    return () => el.removeEventListener('wheel', wheel);
+  }, []);
+  useEffect(() => {
+    row.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [genre]);
+  const key = (e: React.KeyboardEvent) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    const at = DISCOVER_GENRES.findIndex((g) => g.id === genre);
+    const to = e.key === 'Home' ? 0 : e.key === 'End' ? DISCOVER_GENRES.length - 1 : step ? (at + step + DISCOVER_GENRES.length) % DISCOVER_GENRES.length : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    onPick(DISCOVER_GENRES[to].id);
+    row.current?.querySelectorAll<HTMLElement>('[role="radio"]')[to]?.focus();
+  };
+  return (
+    <div className="disc-chips genres" role="radiogroup" aria-label="Genre" ref={row} onKeyDown={key}>
+      {DISCOVER_GENRES.map((g) => (
+        <button key={g.id} role="radio" aria-checked={genre === g.id} tabIndex={genre === g.id ? 0 : -1} className={`disc-chip ghost ${genre === g.id ? 'on' : ''}`} onClick={() => onPick(g.id)}>{g.label}</button>
+      ))}
+    </div>
+  );
+}
+
 export function DiscoverPage({ ctx }: { ctx: Ctx }) {
   const s = useSettings();
   const [genre, setGenre] = useState('all');
@@ -49,11 +89,7 @@ export function DiscoverPage({ ctx }: { ctx: Ctx }) {
   const { data, error, loading, refreshing, retry } = useCached(key, () => getDiscover(langs, genre), 30 * 60 * 1000);
   return (
     <div className="discover">
-      <div className="disc-chips genres" role="radiogroup" aria-label="Genre">
-        {DISCOVER_GENRES.map((g) => (
-          <button key={g.id} role="radio" aria-checked={genre === g.id} className={`disc-chip ghost ${genre === g.id ? 'on' : ''}`} onClick={() => setGenre(g.id)}>{g.label}</button>
-        ))}
-      </div>
+      <GenreChips genre={genre} onPick={setGenre} />
       {loading && !data ? <SkelRows n={8} /> : error && !data ? (
         <div className="err-box"><span>{error}</span><button className="pill sm ghost" onClick={retry}>Try again</button></div>
       ) : data && (

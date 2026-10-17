@@ -90,7 +90,7 @@ h1, h2, h3 { margin: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* track rows */
-.track-grid { display: grid; grid-template-columns: 1fr; gap: 2px; }
+.track-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .track { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 10px; position: relative; }
 .track:hover, .track.active { background: var(--panel); }
 .track-art { position: relative; width: 44px; height: 44px; flex: none; border-radius: 6px; overflow: hidden; }
@@ -269,7 +269,7 @@ input[type=range]:hover::-webkit-slider-thumb, input[type=range]:focus-visible::
   .nav li button::before { content: ''; position: absolute; left: 0; top: 50%; width: 8px; border-top: 1px solid var(--line); }
   .nav li button:hover { background: var(--panel); }
   .nav li button.on { background: var(--panel-2); color: var(--text); }
-  .track-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .track-grid { grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }
 }
 @media (min-width: 1000px) {
   :root { --side-w: 380px; }
@@ -893,3 +893,34 @@ button.link:hover, button.link:focus-visible { text-decoration: underline; }
 .activate:hover { border-color: var(--accent); }
 .am-check.on:hover { background: var(--accent-fill-hover); border-color: var(--accent-fill-hover); }
 .sheet-text-btn:active, .edit-link:active, .am-round:active { opacity: .7; }
+
+/* Responsive rows and Explore (v1.1.1).
+   A grid track of plain `1fr` can't shrink below its rows' min-content width, and a
+   row's min-content is its full unwrapped title and artist line, so long metadata
+   widened the list past the panel and pushed the time and the ⋯ button out of view.
+   Columns now start at 0, the text column is the only one that shrinks, and the time
+   and ⋯ never do. */
+.main { min-width: 0; overflow-x: hidden; overscroll-behavior-y: contain; }
+.content, .discover, .section { min-width: 0; }
+.track { min-width: 0; }
+.track-rank, .track-art, .track-dur, .track-actions { flex: none; }
+.track-dur { min-width: 3ch; text-align: right; }
+.track-sub, .track-meta2 { max-width: 100%; }
+.section-head { gap: 10px; }
+.section-head > :first-child { min-width: 0; }
+.section-head h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.head-actions { flex: none; }
+/* Genre chips scroll sideways edge to edge instead of stopping short of the panel edge. */
+.disc-chips.genres {
+  margin: 0 -14px; padding: 2px 14px 14px; scroll-padding-inline: 14px; scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain; flex-wrap: nowrap;
+}
+.disc-chips.genres .disc-chip { scroll-snap-align: start; }
+@media (min-width: 1000px) { .disc-chips.genres { margin: 0 -24px; padding-left: 24px; padding-right: 24px; scroll-padding-inline: 24px; } }
+.tab-mode .disc-chips.genres { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+/* The scroller's own bottom padding clears the floating dock; the footer doesn't add more. */
+.disc-foot { margin-bottom: 24px; }
+@media (max-width: 380px) { .track { gap: 8px; } .track-dur { font-size: 11px; } }
+/* A <button> is always laid out as an atomic inline box, so the line's own ellipsis
+   can't cut into the artist link; the link truncates itself instead. */
+.track-sub > button.link { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
