@@ -12,6 +12,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Turns a queued track into an openable stream, using whichever source can
@@ -716,6 +717,9 @@ object SourceResolver {
      * @return the winning source alongside its stream, so callers can name it in
      *   a log line without searching the list again.
      */
+    /** How long after the first usable answer others still count as arriving together. */
+    private const val TIE_WINDOW_MS = 60L
+
     internal suspend fun bestAcross(
         sources: List<MusicSource>,
         target: TrackMatcher.Target,
@@ -762,7 +766,22 @@ object SourceResolver {
                 // playing, and its caller explicitly requested every source's
                 // patient result. Let every source finish so a fast lower tier
                 // cannot cancel a later, better rendition.
-                if (best != null && !waitForAll) break
+                if (best != null && !waitForAll) {
+                    // Tunes: a source finishing a few milliseconds after the first
+                    // is still "together" with it. Without this short window, which
+                    // of two near-simultaneous answers won depended on thread
+                    // scheduling, so a 128 kbps answer could beat a 320 kbps one.
+                    withTimeoutOrNull(TIE_WINDOW_MS) {
+                        while (running.isNotEmpty()) {
+                            val next = select { running.forEach { candidate -> candidate.onAwait { candidate } } }
+                            running -= next
+                            val (source, stream) = next.await()
+                            if (stream == null || !accept(source, stream)) continue
+                            if (isBetter(stream.format, best?.second?.format)) best = source to stream
+                        }
+                    }
+                    break
+                }
             }
         } finally {
             running.forEach { it.cancel() }
