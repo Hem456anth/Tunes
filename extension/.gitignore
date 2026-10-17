@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-mobile/
+*.zip
+*.apk
+*.jks
+keystore.properties
+android/local.properties

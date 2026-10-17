@@ -1,0 +1,35 @@
+{
+  "name": "tunes",
+  "version": "1.1.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build && node scripts/build-scripts.mjs",
+    "dev": "vite build --watch",
+    "zip": "cd dist && zip -r ../tunes.zip .",
+    "build:mobile": "node mobile/build-mobile.mjs && npx cap sync android",
+    "apk": "npm run build:mobile && cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/browser": "^7.0.5",
+    "@capacitor/core": "^7.6.9",
+    "@capacitor/status-bar": "^7.0.6",
+    "crypto-js": "^4.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.9",
+    "@types/chrome": "^0.3.5",
+    "@types/crypto-js": "^4.2.2",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^5.4.21"
+  }
+}

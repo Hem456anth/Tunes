@@ -1,0 +1,105 @@
+{
+  "manifest_version": 3,
+  "name": "Tunes",
+  "short_name": "Tunes",
+  "version": "1.1.0",
+  "description": "Tunes: a music player in Chrome's side panel with YouTube Music, synced lyrics and a clean, artwork-driven player.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Open Tunes",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "declarativeNetRequest",
+    "offscreen",
+    "cookies",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://music.youtube.com/*",
+    "https://www.youtube.com/*",
+    "https://*.googlevideo.com/*",
+    "https://www.jiosaavn.com/*",
+    "https://*.saavncdn.com/*",
+    "https://*.googleusercontent.com/*",
+    "https://*.ytimg.com/*",
+    "https://lrclib.net/*",
+    "https://accounts.google.com/*",
+    "https://music.apple.com/*",
+    "https://lyricsplus.binimum.org/*",
+    "https://lyricsplus.prjktla.workers.dev/*",
+    "https://lyricsplus.atomix.one/*",
+    "https://lyricsplus.prjktla.my.id/*",
+    "https://lyricsplus-seven.vercel.app/*",
+    "https://lyrics.paxsenix.org/*",
+    "https://itunes.apple.com/*",
+    "https://lyrics.kugou.com/*",
+    "https://apic-desktop.musixmatch.com/*",
+    "https://genius.com/*",
+    "https://api.listenbrainz.org/*",
+    "https://*.youtube.com/*",
+    "https://*.google.com/*",
+    "https://*.apple.com/*",
+    "https://open.spotify.com/*",
+    "https://api.spotify.com/*",
+    "https://amp-api.music.apple.com/*",
+    "https://ws.audioscrobbler.com/*",
+    "https://www.last.fm/*",
+    "https://api.deezer.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://open.spotify.com/*"
+      ],
+      "js": [
+        "spotify-hook.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    }
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+M"
+      },
+      "description": "Open Tunes"
+    },
+    "toggle-play": {
+      "suggested_key": {
+        "default": "Alt+Shift+P"
+      },
+      "description": "Play / pause"
+    },
+    "next-track": {
+      "suggested_key": {
+        "default": "Alt+Shift+Period"
+      },
+      "description": "Next track"
+    },
+    "prev-track": {
+      "suggested_key": {
+        "default": "Alt+Shift+Comma"
+      },
+      "description": "Previous track"
+    }
+  }
+}
