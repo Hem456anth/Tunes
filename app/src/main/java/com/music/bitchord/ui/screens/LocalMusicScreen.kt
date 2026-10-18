@@ -12,7 +12,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import com.music.bitchord.ui.components.longPressMenuClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MoreHoriz
@@ -102,9 +103,14 @@ import com.music.bitchord.data.settings.LibraryViewType
 import com.music.bitchord.data.settings.LocalMusicSort
 import com.music.bitchord.download.DownloadedCollection
 import com.music.bitchord.ui.components.MessageState
+import com.music.bitchord.ui.components.PlayingAccent
 import com.music.bitchord.ui.components.PAGE_GUTTER
+import com.music.bitchord.ui.components.hangIntoGutter
+import com.music.bitchord.ui.components.NUMBERED_ROW_DIVIDER_INSET
 import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
 import com.music.bitchord.ui.components.SongRow
+import com.music.bitchord.ui.components.SearchPlayingBars
+import com.music.bitchord.ui.components.rememberRemoteArtworkUrl
 import com.music.bitchord.ui.components.thumbnailBorder
 import com.music.bitchord.ui.components.TopBarContentGap
 import com.music.bitchord.ui.components.topBarHeight
@@ -169,6 +175,8 @@ fun LocalMusicScreen(
     isPlaying: Boolean = false,
     /** Deletes the Downloads rows selected through this screen's long-press mode. */
     onDeleteDownloads: ((List<Song>) -> Unit)? = null,
+    /** Copies the selected Downloads rows to the WebDAV server; null hides the action. */
+    onUploadToWebDav: ((List<Song>) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     // Which top-level tab is selected.
@@ -259,6 +267,14 @@ fun LocalMusicScreen(
                     selectedDownloadIds = emptySet()
                     selectedAlbumKeys = emptySet()
                     onDeleteDownloads?.invoke(chosen)
+                },
+                onUpload = onUploadToWebDav?.let { upload ->
+                    {
+                        val chosen = songs.filter { it.videoId in selectedDownloadIds }
+                        selectedDownloadIds = emptySet()
+                        selectedAlbumKeys = emptySet()
+                        upload(chosen)
+                    }
                 },
                 onCancel = {
                     selectedDownloadIds = emptySet()
@@ -522,11 +538,13 @@ private fun SongsTab(
                     modifier = Modifier.padding(horizontal = 0.dp, vertical = 10.dp),
                 )
             }
-            itemsIndexed(songs) { index, song ->
+            itemsIndexed(songs, key = { index, song -> "${song.videoId}_$index" }) { index, song ->
                 SongGridCard(
                     song = song,
                     selected = song.videoId in selectedIds,
                     isCurrent = song.isSameTrackAs(currentSong),
+                    isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
+                    searchPlayingStyle = true,
                     onClick = { onSongClick(songs, index) },
                     onLongPress = { onSongLongPress(song) },
                 )
@@ -545,12 +563,14 @@ private fun SongsTab(
                     title = pluralStringResource(R.plurals.song_count_plural, songs.size, songs.size),
                 )
             }
-            itemsIndexed(songs) { index, song ->
+            itemsIndexed(songs, key = { index, song -> "${song.videoId}_$index" }) { index, song ->
                 SongRow(
                     song = song,
                     selected = song.videoId in selectedIds,
                     isCurrent = song.isSameTrackAs(currentSong),
                     isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
+                    searchPlayingStyle = true,
+                    activeTint = PlayingAccent,
                     onClick = { onSongClick(songs, index) },
                     onLongPress = { onSongLongPress(song) },
                     onMore = onSongMore?.let { more -> { more(song) } },
@@ -574,6 +594,8 @@ private fun SongGridCard(
     song: Song,
     selected: Boolean = false,
     isCurrent: Boolean = false,
+    isPlaying: Boolean = false,
+    searchPlayingStyle: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -582,7 +604,7 @@ private fun SongGridCard(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .longPressMenuClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(4.dp),
     ) {
         val shape = RoundedCornerShape(12.dp)
@@ -609,7 +631,9 @@ private fun SongGridCard(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            if (isCurrent) {
+            if (isCurrent && searchPlayingStyle && isPlaying) {
+                SearchPlayingBars(Modifier.align(Alignment.Center))
+            } else if (isCurrent) {
                 Icon(
                     Icons.Rounded.GraphicEq,
                     contentDescription = stringResource(R.string.now_playing),
@@ -622,7 +646,7 @@ private fun SongGridCard(
         ExplicitSongTitle(
             song = song,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = if (isCurrent && searchPlayingStyle) PlayingAccent else MaterialTheme.colorScheme.onBackground,
         )
         Text(
             text = song.artist.ifBlank { stringResource(R.string.unknown_artist) },
@@ -719,7 +743,7 @@ private fun ArtistRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .longPressMenuClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = PAGE_GUTTER, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -786,7 +810,7 @@ private fun ArtistGridCard(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .longPressMenuClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -1018,7 +1042,7 @@ private fun AlbumGridCard(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent)
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .longPressMenuClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(4.dp),
     ) {
         val shape = RoundedCornerShape(12.dp)
@@ -1037,9 +1061,13 @@ private fun AlbumGridCard(
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(36.dp),
             )
-            if (entry.thumbnailUrl != null) {
+            // Albums grouped off tags have no cover of their own; the first
+            // track's embedded picture stands in until the real one exists.
+            val fetchedArt = rememberRemoteArtworkUrl(entry.songs.firstOrNull())
+            val cardArt = entry.thumbnailUrl ?: fetchedArt
+            if (cardArt != null) {
                 AsyncImage(
-                    model = entry.thumbnailUrl.artworkAt(CARD_ART_PX),
+                    model = cardArt.artworkAt(CARD_ART_PX),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -1086,16 +1114,19 @@ private fun AlbumRow(
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
+    // Hoisted out of the artwork call below: a conditional hook would
+    // reshuffle composition groups when a refresh fills the cover in.
+    val fetchedArt = rememberRemoteArtworkUrl(entry.songs.firstOrNull())
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent, RoundedCornerShape(10.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .longPressMenuClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = PAGE_GUTTER, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CollectionArtwork(
-            url = entry.thumbnailUrl,
+            url = entry.thumbnailUrl ?: fetchedArt,
             playlist = entry.playlist,
             size = 48.dp,
         )
@@ -1205,8 +1236,15 @@ private fun DrillDownHeader(
             }
             Spacer(Modifier.weight(1f))
             onMore?.let { more ->
+                // Hangs into the gutter the way the back arrow opposite it
+                // does (that one through the row's 6dp start), so the two
+                // glyphs sit the same distance from their edges.
                 Box(
-                    modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = more),
+                    modifier = Modifier
+                        .hangIntoGutter(PAGE_GUTTER - 6.dp)
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = more),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Rounded.MoreHoriz, stringResource(R.string.more), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1365,11 +1403,13 @@ private fun DrillDownSongList(
                     onShuffle = onShuffle,
                 )
             }
-            itemsIndexed(songs) { index, song ->
+            itemsIndexed(songs, key = { index, song -> "${song.videoId}_$index" }) { index, song ->
                 SongGridCard(
                     song = song,
                     selected = song.videoId in selectedIds,
                     isCurrent = song.isSameTrackAs(currentSong),
+                    isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
+                    searchPlayingStyle = true,
                     onClick = { onSongClick(songs, index) },
                     onLongPress = { onSongLongPress(song) },
                 )
@@ -1398,12 +1438,14 @@ private fun DrillDownSongList(
                     onShuffle = onShuffle,
                 )
             }
-            itemsIndexed(songs) { index, song ->
+            itemsIndexed(songs, key = { index, song -> "${song.videoId}_$index" }) { index, song ->
                 SongRow(
                     song = song,
                     selected = song.videoId in selectedIds,
                     isCurrent = song.isSameTrackAs(currentSong),
                     isPlaying = song.isSameTrackAs(currentSong) && isPlaying,
+                    searchPlayingStyle = true,
+                    activeTint = PlayingAccent,
                     trackNumber = index + 1,
                     onClick = { onSongClick(songs, index) },
                     onLongPress = { onSongLongPress(song) },
@@ -1412,7 +1454,7 @@ private fun DrillDownSongList(
                 )
                 if (index < songs.lastIndex) {
                     HorizontalDivider(
-                        modifier = Modifier.padding(start = ROW_DIVIDER_INSET),
+                        modifier = Modifier.padding(start = NUMBERED_ROW_DIVIDER_INSET),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     )
@@ -1424,8 +1466,12 @@ private fun DrillDownSongList(
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
-/** Whether this track is a hit for a query typed into [LocalSearchField]. */
-private fun Song.matchesSearch(query: String): Boolean =
+/**
+ * Whether this track is a hit for a query typed into [LocalSearchField] — or
+ * into the Search tab with its Library source picked, which has to find the
+ * same tracks this folder would.
+ */
+internal fun Song.matchesSearch(query: String): Boolean =
     title.contains(query, ignoreCase = true) ||
         artist.contains(query, ignoreCase = true) ||
         albumName?.contains(query, ignoreCase = true) == true
@@ -1594,6 +1640,8 @@ private fun DownloadSelectionBar(
     onDelete: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Copies the selection to WebDAV; null (no server configured) hides the action. */
+    onUpload: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -1617,6 +1665,21 @@ private fun DownloadSelectionBar(
             color = if (isSystemInDarkTheme()) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
         )
+        onUpload?.let { upload ->
+            TextButton(onClick = upload, enabled = count > 0) {
+                Icon(
+                    Icons.Rounded.FileUpload,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    stringResource(R.string.upload_to_webdav),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         TextButton(onClick = onDelete, enabled = count > 0) {
             Icon(
                 Icons.Rounded.Delete,

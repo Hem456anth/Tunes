@@ -119,15 +119,15 @@ fun BitChordTheme(
  * `enableEdgeToEdge()` decides this from the *system* dark-mode setting, which
  * is the wrong input the moment the in-app theme disagrees with it: Light theme
  * on a phone in dark mode left white icons on a white bar, invisible. The bars
- * have to follow the theme the app is actually painting — with one exception,
- * the player, which is dark artwork regardless and so always wants light
- * glyphs. Hence a parameter rather than reading the theme here.
+ * have to follow the content the app is actually painting. The player supplies
+ * its own stable light-icon value and paints contrast behind it; every other
+ * surface follows the theme. Hence a parameter rather than reading it here.
  */
 @Composable
 fun SystemBarIcons(dark: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
-    val window = (view.context as? Activity)?.window ?: return
+    val window = findWindow(view) ?: return
     SideEffect {
         WindowCompat.getInsetsController(window, view).apply {
             isAppearanceLightStatusBars = dark
@@ -135,3 +135,4 @@ fun SystemBarIcons(dark: Boolean) {
         }
     }
 }
+

@@ -46,15 +46,98 @@ import java.util.Locale
 object StreamContainer {
 
     /**
+     * Gives a manifest retry a different playback URI from the progressive
+     * item it replaces.
+     *
+     * Media3's [androidx.media3.exoplayer.source.ProgressiveMediaSource]
+     * accepts an updated [androidx.media3.common.MediaItem] in place when its
+     * URI, image duration and custom cache key are unchanged. MIME type is not
+     * part of that decision. Consequently, replacing an item with the same URI
+     * plus `application/dash+xml` only updates the old progressive source; it
+     * does not send the item back through `DefaultMediaSourceFactory` to build
+     * a DASH source.
+     *
+     * The marker changes only the app's virtual `bitchord://` URI. The resolver
+     * ignores it, and [AudioCache] keys YouTube tracks from `v`/`q` and source
+     * tracks from `s`/`t`, so it neither changes the real stream selected nor
+     * invents another cache rendition. Its sole job is to make Media3 construct
+     * the correctly typed source.
+     *
+     * Kept as a string operation so this rule remains testable on the plain JVM
+     * without Android's `Uri` implementation.
+     */
+    fun markedForManifestReopen(uri: String, mime: String): String {
+        val transport = when (mime) {
+            MimeTypes.APPLICATION_MPD -> "dash"
+            MimeTypes.APPLICATION_M3U8 -> "hls"
+            else -> return uri
+        }
+        val fragmentAt = uri.indexOf('#')
+        val base = if (fragmentAt >= 0) uri.substring(0, fragmentAt) else uri
+        val fragment = if (fragmentAt >= 0) uri.substring(fragmentAt) else ""
+        val separator = if ('?' in base) '&' else '?'
+        return "$base$separator$REOPEN_PARAMETER=$transport$fragment"
+    }
+
+    /**
      * The mime type Media3 needs to be told for [url], or null when it points
      * at ordinary audio and needs no telling.
+     *
+     * A source that *said* what the URL is outranks the extension — see
+     * [declare]. The extension is the fallback, and remains the only answer
+     * available for a source that says nothing.
      */
     fun manifestMimeOf(url: String): String? =
-        when (url.substringBefore('?').substringAfterLast('.').lowercase(Locale.ROOT)) {
-            "m3u8" -> MimeTypes.APPLICATION_M3U8
-            "mpd" -> MimeTypes.APPLICATION_MPD
-            else -> null
+        declared[url]
+            ?: when (url.substringBefore('?').substringAfterLast('.').lowercase(Locale.ROOT)) {
+                "m3u8" -> MimeTypes.APPLICATION_M3U8
+                "mpd" -> MimeTypes.APPLICATION_MPD
+                else -> null
+            }
+
+    /**
+     * Records that [url] carries [transport] — `hls` or `dash` — because the
+     * source that handed it over said so.
+     *
+     * Judging on the extension is a guess, and it is wrong in exactly the case
+     * this app now meets most often: an addon that serves an HLS playlist from
+     * an extensionless path. The reference addon does this at `/dash/{id}`,
+     * which has no `.m3u8` to read, is not a DASH manifest despite the name,
+     * and reports `format: "flac"` — three ways of looking like a plain FLAC
+     * file while being an index of one. Handed to a progressive source, that
+     * fails on the only error it can raise, and the recovery path that would
+     * normally re-prepare with a declared type has nothing to declare either,
+     * because it asks this same question.
+     *
+     * So a source that knows says so, once, and every existing caller —
+     * the item builder, the may-I-substitute check, the failure recovery —
+     * gets the right answer without any of them learning about addons.
+     *
+     * Keyed by URL rather than by media id because that is what all three
+     * callers hold, and because a signed URL is already unique to one
+     * resolution of one track. Bounded the same cheap way as [serving]: this is
+     * an optimisation over sniffing, and losing an entry costs a guess, not a
+     * track.
+     */
+    fun declare(url: String, transport: String) {
+        val mime = when (transport.lowercase(Locale.ROOT)) {
+            "hls" -> MimeTypes.APPLICATION_M3U8
+            "dash" -> MimeTypes.APPLICATION_MPD
+            else -> return
         }
+        if (declared.size >= MAX_REMEMBERED) declared.clear()
+        declared[url] = mime
+    }
+
+    /**
+     * What a source stated about a URL, where it stated anything.
+     *
+     * Separate from [serving] because the two answer different questions —
+     * this one is "what is this URL", which is true wherever the URL turns up,
+     * and that one is "what is this track being served right now", which is
+     * only true until the track moves.
+     */
+    private val declared = ConcurrentHashMap<String, String>()
 
     /** Whether [url] is an index of the audio rather than the audio. */
     fun isManifest(url: String) = manifestMimeOf(url) != null
@@ -84,5 +167,6 @@ object StreamContainer {
      */
     fun manifestServing(mediaId: String): String? = serving[mediaId]?.let(::manifestMimeOf)
 
+    private const val REOPEN_PARAMETER = "manifest_reopen"
     private const val MAX_REMEMBERED = 64
 }

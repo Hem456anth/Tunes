@@ -30,6 +30,7 @@ import android.os.Process
 import android.util.Log
 import androidx.media3.common.util.UnstableApi
 import com.music.bitchord.data.YtMusicRepository
+import com.music.bitchord.data.listentogether.ListenTogether
 import com.music.bitchord.data.model.SearchFilter
 import com.music.bitchord.data.model.SearchResult
 import com.music.bitchord.data.settings.AppSettings
@@ -60,8 +61,49 @@ import java.util.Locale
 @UnstableApi
 class TrackAnalyzer(private val context: Context, private val cache: AudioCache) {
 
-    private val tracker = BeatTracker(context)
-    private val vocals = VocalTracker(context)
+    private val tracker = BeatTracker(
+        modelPath = { unpackedAsset(BeatTracker.MODEL_ASSET) },
+        inferenceThreads = { AppSettings.automixPerformanceMode.value.inferenceThreads },
+    )
+    private val vocals = VocalTracker(
+        modelPath = { unpackedAsset(VocalTracker.MODEL_ASSET) },
+        inferenceThreads = { AppSettings.automixPerformanceMode.value.inferenceThreads },
+    )
+
+    /**
+     * A model's weights on disk, unpacked from assets the first time they are
+     * asked for.
+     *
+     * ONNX Runtime wants a file it can memory-map, and an asset inside the APK
+     * is not one. This used to live inside each tracker; it moved out when they
+     * became shared with the desktop build, which unpacks from the jar instead.
+     */
+    private fun unpackedAsset(name: String): String {
+        val file = java.io.File(context.filesDir, name)
+        if (!file.exists() || file.length() == 0L) {
+            context.assets.open(name).use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+        }
+        return file.absolutePath
+    }
+
+    /**
+     * Whether analysis is switched off entirely right now.
+     *
+     * A party never mixes — [com.music.bitchord.playback.CrossfadeController]
+     * refuses to plan a transition while one is running, because every member
+     * would start the next track at a moment their own copy of the audio
+     * decided on. Measuring for a transition that cannot happen is then pure
+     * cost, and not a small one: a whole-track decode, two ONNX passes, and for
+     * an uncached track a megabyte fetched over the same connection the party's
+     * own sync is sharing.
+     *
+     * Read fresh at every entry point and between the stages of a pass in
+     * flight, rather than latched when the party starts, so joining one stops
+     * the work already running instead of only the work not yet queued.
+     */
+    private val stopped: Boolean get() = ListenTogether.state.value.inParty
 
     /**
      * Resolved on first use, not at construction, for the reason [AnalysisStore]
@@ -114,7 +156,7 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
     private val restoreAttempted = ConcurrentHashMap.newKeySet<String>()
 
     /** Results that survive the process, so a track is measured once and stays measured. */
-    private val store = AnalysisStore(context)
+    private val store = AnalysisStore { context.filesDir }
 
     /**
      * Cache keys of renditions that decoded short despite the cache calling them
@@ -224,6 +266,10 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
      */
     fun request(trackId: String, uri: Uri, durationSeconds: Double) {
         if (trackId.isBlank()) return
+        // Before anything else this would spend: [analysisUriFor] alone can put
+        // a catalogue match on the network for a track the party will never
+        // mix. See [stopped].
+        if (stopped) return
         if (trackId in running) return
         val analysisUri = analysisUriFor(trackId, uri) ?: return
 
@@ -336,6 +382,11 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
                 // result is exempt: superseding one is the whole point of it.
                 val landed = results[trackId]
                 if (landed != null && landed.isUsable && trackId !in provisional) return@execute
+                // The queue this task sat in is single-threaded, so a party
+                // started while the track ahead of it was being measured. Every
+                // task behind that one turns into this return, which drains the
+                // backlog without needing to reach into the executor's queue.
+                if (stopped) return@execute
                 if (usableComplete) {
                     val outcome = analyze(trackId, analysisUri, durationSeconds)
                     val whole = outcome.analysis
@@ -585,6 +636,12 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
         val window = BeatTracker.WINDOW_SECONDS
         val head = region(::openSource, 0.0, window, features = null, deriveFeatures = true)
             ?: run {
+                // An abandoned decode comes back the same way a broken one
+                // does, and only one of the two is worth a warning: see
+                // [stopped]. Nothing is recorded either way — the caller
+                // publishes only a non-null result — so the track is simply
+                // left unmeasured, which is what it is.
+                if (stopped) return null
                 Log.d(TAG, "Head pass for $trackId could not decode rendition ${rendition.key}")
                 return null
             }
@@ -835,7 +892,7 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
         effectiveDuration: Double,
     ): Structural {
         val structRate = TrackFeatures.sampleRate
-        val decoded = copy.open()?.use { AudioDecoder.decodeRegion(it, 0.0, effectiveDuration) }
+        val decoded = copy.open()?.use { AudioDecoder.decodeRegion(it, 0.0, effectiveDuration) { stopped } }
             ?: return Structural(null)
         val (pcm, _) = decoded
 
@@ -950,6 +1007,15 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
         // died on it. Returning is what releases them — a `val` cannot be nulled, and a narrower
         // scope alone does not make ART treat one as dead.
         val structural = structure(trackId, uri, copy, effectiveDuration)
+        // A party started while Pass 1 was decoding. Dropped as "no result"
+        // rather than as a failure — the track was never measured, so nothing
+        // should be recorded against it and nothing should stop it being
+        // measured properly once the party ends.
+        //
+        // Read *before* the two lines below, not after, because an abort comes
+        // back from [structure] as a decode that produced nothing, and that is
+        // exactly what those lines write a permanent "cannot be analysed" for.
+        if (stopped) return WholeTrack(null)
         if (structural.decodedShort) return WholeTrack(null, decodedShort = true)
         val features = structural.features ?: return WholeTrack(empty(trackId, effectiveDuration))
 
@@ -961,7 +1027,17 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
         val window = BeatTracker.WINDOW_SECONDS
         val tailStart = max(0.0, effectiveDuration - window)
         val head = region(openSource, 0.0, minOf(window, effectiveDuration), features)
+        // Between the two model passes, for the same reason as above. Not
+        // folded into the `tail` condition below: a head-only result would be
+        // written *and persisted* as if it were a whole-track one, freezing a
+        // deliberately partial answer in place of the complete one.
+        if (stopped) return WholeTrack(null)
         val tail = if (tailStart > window / 2) region(openSource, tailStart, effectiveDuration, features) else null
+        // Last of the three. An abort during the tail pass leaves `tail` null,
+        // which is indistinguishable from a window the models found nothing in
+        // — and that one gets published, with the DSP estimate standing in. A
+        // result assembled out of a half-finished analysis is worse than none.
+        if (stopped) return WholeTrack(null)
 
         val headGrid = head?.grid
         val tailGrid = tail?.grid
@@ -1050,7 +1126,7 @@ class TrackAnalyzer(private val context: Context, private val cache: AudioCache)
         features: TrackFeatures.Features?,
         deriveFeatures: Boolean = false,
     ): Region? {
-        val decoded = openSource()?.use { AudioDecoder.decodeRegionStereo(it, startSeconds, endSeconds) }
+        val decoded = openSource()?.use { AudioDecoder.decodeRegionStereo(it, startSeconds, endSeconds) { stopped } }
             ?: run {
                 // The two ways this comes back empty mean opposite things and
                 // were reported identically, which cost a round of guessing:

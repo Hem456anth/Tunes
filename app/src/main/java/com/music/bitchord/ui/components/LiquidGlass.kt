@@ -4,8 +4,8 @@
  * upstream attribution. This file is the integration glue, adapted from
  * EchoMusicApp/Echo-Music's GlassEffectConfig/Modifier.liquidGlass
  * (GPL-3.0), cut down from Echo's full per-component/vibrancy-slider config
- * to the single on/off switch BitChord exposes in Settings, and scoped to
- * the floating nav bar only.
+ * to the single on/off switch BitChord exposes in Settings. It is used by the
+ * floating nav bar and, while enabled, the app-wide floating top controls.
  */
 package com.music.bitchord.ui.components
 
@@ -15,20 +15,25 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.music.bitchord.data.settings.AppSettings
 import com.music.bitchord.ui.components.backdrop.Backdrop
+import com.music.bitchord.ui.components.backdrop.backdrops.LayerBackdrop
 import com.music.bitchord.ui.components.backdrop.drawBackdrop
 import com.music.bitchord.ui.components.backdrop.effects.blur
 import com.music.bitchord.ui.components.backdrop.effects.colorControls
 import com.music.bitchord.ui.components.backdrop.effects.lens
 import com.music.bitchord.ui.components.backdrop.highlight.Highlight
+import com.music.bitchord.ui.components.backdrop.highlight.HighlightElement
+import com.music.bitchord.ui.components.backdrop.internal.ShapeProvider
 import com.music.bitchord.ui.components.backdrop.shadow.Shadow
 import androidx.compose.ui.unit.dp
 
@@ -37,6 +42,15 @@ val LocalLiquidGlassEnabled = staticCompositionLocalOf { false }
 
 /** The backdrop content (app UI) that a liquid glass surface samples from. */
 val LocalAppBackdrop = staticCompositionLocalOf<Backdrop> { error("No AppBackdrop provided") }
+
+/**
+ * Where a [liquidGlass] surface composed under it also records the glass it
+ * draws — the sampled, blurred and tinted backdrop, without its rim or shadow —
+ * so a lens above it can refract that surface rather than the page behind it.
+ * The tab bar's travelling selection pill is the one reader; see
+ * [com.music.bitchord.ui.components.floatingtabbar.GlassSelectionPill].
+ */
+internal val LocalGlassExport = compositionLocalOf<LayerBackdrop?> { null }
 
 /**
  * The backdrop blur pipeline requires [android.graphics.RenderEffect] on a
@@ -99,6 +113,45 @@ fun glassIndicatorColor(): Color =
     if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) Color.White else Color.Black
 
 /**
+ * A lightweight visual match for liquid glass over a stable background.
+ *
+ * This keeps the same translucent tint, directional highlight and hairline as
+ * [liquidGlass], but intentionally performs no backdrop capture, blur, lens
+ * refraction or shadow rendering. When Liquid Glass is disabled or unsupported,
+ * [fallbackColor] preserves the control's existing filled appearance.
+ */
+@Composable
+fun Modifier.lightweightLiquidGlass(
+    shape: CornerBasedShape,
+    fallbackColor: Color,
+): Modifier {
+    val useGlass = LocalLiquidGlassEnabled.current && isGlassSupported()
+    val glassTint = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
+        Color(0xFFFAFAFA)
+    } else {
+        Color(0xFF121212)
+    }
+    val shapeProvider = ShapeProvider { shape }
+
+    return clip(shape)
+        .background(
+            color = if (useGlass) glassTint.copy(alpha = SURFACE_OPACITY) else fallbackColor,
+            shape = shape,
+        )
+        .then(
+            if (useGlass) {
+                HighlightElement(
+                    shapeProvider = shapeProvider,
+                    highlight = { Highlight.Default },
+                )
+            } else {
+                Modifier
+            },
+        )
+        .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape)
+}
+
+/**
  * Renders this composable as a liquid glass surface sampling [LocalAppBackdrop]:
  * vibrancy, blur and lens refraction, then a theme-adaptive surface tint (light
  * glass on light theme, dark on dark). Returns the receiver unchanged on devices
@@ -123,6 +176,7 @@ fun Modifier.liquidGlass(shape: CornerBasedShape): Modifier {
             .border(GLASS_EDGE_WIDTH, GLASS_EDGE_COLOR, shape)
     }
     val backdrop = LocalAppBackdrop.current
+    val exportedBackdrop = LocalGlassExport.current
     val density = LocalDensity.current
     val blurPx = with(density) { BLUR_RADIUS_DP.dp.toPx() } * GLASS_RESOLUTION_SCALE
     val lensHeightPx = with(density) { (LENS_HEIGHT * LENS_MAX_DP).dp.toPx() } * GLASS_RESOLUTION_SCALE
@@ -153,6 +207,7 @@ fun Modifier.liquidGlass(shape: CornerBasedShape): Modifier {
         onDrawSurface = {
             drawRect(color = surfaceTintColor.copy(alpha = SURFACE_OPACITY), size = size)
         },
+        exportedBackdrop = exportedBackdrop,
         backdropScale = GLASS_RESOLUTION_SCALE,
     )
 }

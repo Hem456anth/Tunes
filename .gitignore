@@ -1,7 +1,9 @@
 # Gradle
 .gradle/
+.vscode/
 /build/
 /app/build/
+/desktopApp/bin/
 build/
 gradle-app.setting
 !gradle-wrapper.jar
@@ -38,3 +40,7 @@ keystore.properties
 .shots/
 .tmp_verify/
 .debug/
+
+# AI agent configuration
+AGENTS.md
+/output/

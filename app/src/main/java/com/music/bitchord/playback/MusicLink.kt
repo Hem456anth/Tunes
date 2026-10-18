@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 /** What an intent from outside the app turned out to be asking for. */
 sealed interface LinkRequest {
     /** A song, by video id — `watch?v=`, a `youtu.be` short link, a Short. */
-    data class Track(val videoId: String) : LinkRequest
+    data class Track(val videoId: String, val startMs: Long = 0L) : LinkRequest
 
     /** An album, playlist or artist page, by browse id. */
     data class Page(val browseId: String) : LinkRequest
@@ -108,8 +108,11 @@ object MusicLink {
     fun parse(uri: Uri): LinkRequest? {
         val host = uri.host?.lowercase()?.removePrefix("www.") ?: return null
         val segments = uri.pathSegments.orEmpty()
+        // Tunes handoff: a `t=` (seconds, "90s" or "1m30s") carries the
+        // position, so a song continued from Tunes for Chrome picks up there.
+        val startMs = startOffsetMs(uri.getQueryParameter("t"))
         if (host == "youtu.be") {
-            return segments.firstOrNull()?.let(::track)
+            return segments.firstOrNull()?.let { track(it, startMs) }
         }
         if (host != "youtube.com" && host != "music.youtube.com" && host != "m.youtube.com") {
             return null
@@ -120,7 +123,7 @@ object MusicLink {
             // well. The video is what was tapped, so it wins; the list only
             // stands in when the link names no video at all, which is how YT
             // Music writes "play this album" links.
-            "watch" -> uri.getQueryParameter("v")?.let(::track) ?: playlist(list)
+            "watch" -> uri.getQueryParameter("v")?.let { track(it, startMs) } ?: playlist(list)
             "playlist" -> playlist(list)
             // A Short and an embed are both a bare id in the path.
             "shorts", "embed", "v" -> segments.getOrNull(1)?.let(::track)
@@ -137,8 +140,21 @@ object MusicLink {
         }
     }
 
-    private fun track(videoId: String): LinkRequest.Track? =
-        videoId.trim().takeIf { it.isNotEmpty() }?.let(LinkRequest::Track)
+    private fun track(videoId: String, startMs: Long = 0L): LinkRequest.Track? =
+        videoId.trim().takeIf { it.isNotEmpty() }?.let { LinkRequest.Track(it, startMs) }
+
+    private val T_PARAM = Regex("""^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$""")
+
+    /** YouTube's `t` parameter: "754", "754s", "12m34s", "1h2m3s". Bad or absent values give 0. */
+    fun startOffsetMs(t: String?): Long {
+        val v = t?.trim()?.lowercase().orEmpty()
+        if (v.isEmpty()) return 0L
+        v.toLongOrNull()?.let { return if (it in 1..86_400) it * 1000 else 0L }
+        val m = T_PARAM.matchEntire(v) ?: return 0L
+        val (h, mm, s) = m.destructured
+        val total = (h.toLongOrNull() ?: 0) * 3600 + (mm.toLongOrNull() ?: 0) * 60 + (s.toLongOrNull() ?: 0)
+        return if (total in 1..86_400) total * 1000 else 0L
+    }
 
     /**
      * A playlist id as the browse id its page is fetched under.
