@@ -11,9 +11,9 @@ This document lists the maintainers responsible for Tunes and for BitChord, the 
 
 Maintainers oversee project direction, repository maintenance, review and merging of contributions, and release management.
 
-## Contributors
+## Upstream BitChord contributors
 
-This list is automatically generated from GitHub repository contributor data.
+Tunes builds on work by these BitChord contributors.
 
 <!-- BEGIN CONTRIBUTORS -->
 - [@kushagrasinghx](https://github.com/kushagrasinghx)
