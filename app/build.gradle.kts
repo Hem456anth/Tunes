@@ -82,8 +82,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // Tunes 3.1.0 = BitChord v1.8 + Tunes changes. 4 > 3 (Tunes 3.0.x), same signing key.
-        versionCode = 4
-        versionName = "3.1.0"
+        versionCode = 5
+        versionName = "3.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

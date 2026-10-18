@@ -2,6 +2,7 @@ package com.music.bitchord.ui.screens
 
 import com.music.bitchord.sharedui.resources.*
 import org.jetbrains.compose.resources.stringResource
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,11 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -25,21 +28,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.music.bitchord.data.model.HomeShelf
@@ -74,44 +70,27 @@ fun ExploreScreen(
         state = pullState,
         modifier = modifier,
     ) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val columns = moodColumns(maxWidth)
-            LazyColumn(
-                state = listState,
-                contentPadding = contentPadding,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                if (showTitle) {
-                    item {
-                        Text(
-                            text = stringResource(Res.string.explore),
-                            style = MaterialTheme.typography.displayLarge,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            // 14dp under the title, the same gap Library leaves
-                            // above its first card (8dp title + 6dp Replay row).
-                            modifier = Modifier.padding(
-                                start = PAGE_GUTTER,
-                                end = PAGE_GUTTER,
-                                top = 8.dp,
-                                bottom = 14.dp,
-                            ),
-                        )
-                    }
+        LazyColumn(
+            state = listState,
+            contentPadding = contentPadding,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            if (showTitle) item {
+                Text(
+                    text = stringResource(Res.string.explore),
+                    style = MaterialTheme.typography.displayLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(horizontal = PAGE_GUTTER, vertical = 8.dp),
+                )
+            }
+            when (state) {
+                UiState.Loading -> item { ExploreSkeleton() }
+                is UiState.Error -> item {
+                    MessageState(state.message, actionLabel = stringResource(Res.string.retry), onAction = onRetry)
                 }
-                when (state) {
-                    UiState.Loading -> item { ExploreSkeletonRows(columns) }
-                    is UiState.Error -> item {
-                        MessageState(state.message, actionLabel = stringResource(Res.string.retry), onAction = onRetry)
-                    }
-                    is UiState.Success -> {
-                        // Moods and genres read as one grid; the server's
-                        // grouping only decides the order.
-                        val rows = state.data.flatMap(MoodGenreSection::items)
-                            .distinctBy { it.browseId to it.params }
-                            .chunked(columns)
-                        items(rows, key = { row -> row.first().let { "${it.browseId}|${it.params}" } }) { row ->
-                            MoodGenreRow(row = row, columns = columns, onCategoryClick = onCategoryClick)
-                        }
+                is UiState.Success -> state.data.forEach { section ->
+                    item(key = section.title) {
+                        MoodGenreGrid(section = section, onCategoryClick = onCategoryClick)
                     }
                 }
             }
@@ -120,172 +99,117 @@ fun ExploreScreen(
 }
 
 @Composable
-private fun MoodGenreRow(
-    row: List<MoodGenre>,
-    columns: Int,
+private fun MoodGenreGrid(
+    section: MoodGenreSection,
     onCategoryClick: (MoodGenre) -> Unit,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(MOOD_SPACING),
-        modifier = Modifier
-            .padding(horizontal = PAGE_GUTTER)
-            .padding(bottom = MOOD_SPACING),
-    ) {
-        row.forEach { item ->
-            MoodGenreCard(
-                item = item,
-                onClick = { onCategoryClick(item) },
-                modifier = Modifier.weight(1f),
-            )
+    Column(Modifier.padding(bottom = 22.dp)) {
+        SectionHeader(section.title)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val cardWidth = (maxWidth - PAGE_GUTTER * 2 - 12.dp) / 2
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(horizontal = PAGE_GUTTER),
+            ) {
+                section.items.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        row.forEach { item ->
+                            MoodGenreCard(
+                                item = item,
+                                onClick = { onCategoryClick(item) },
+                                modifier = Modifier.width(cardWidth),
+                            )
+                        }
+                        if (row.size == 1) Spacer(Modifier.width(cardWidth))
+                    }
+                }
+            }
         }
-        // Short rows keep their cards the size of a full row's.
-        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
     }
 }
 
-/**
- * A solid stripe down the left and the category's cover filling the rest,
- * redrawn as a duotone of the stripe's colour so every card reads as one
- * tinted sleeve rather than a photo pasted onto a swatch.
- */
 @Composable
 private fun MoodGenreCard(
     item: MoodGenre,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tone = remember(item.stripeColor, item.title) { moodTone(item) }
+    val color = moodColor(item.title)
     Box(
         modifier = modifier
-            .aspectRatio(MOOD_CARD_ASPECT)
-            .clip(MOOD_CARD_SHAPE)
-            .background(tone.stripe)
-            .clickable(onClick = onClick),
+            .height(100.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(color, color.copy(red = color.red * .68f, green = color.green * .68f, blue = color.blue * .68f)),
+                ),
+            )
+            .clickable(onClick = onClick)
+            .padding(12.dp),
     ) {
         Box(
             Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .fillMaxWidth(1f - MOOD_STRIPE_FRACTION)
-                .background(tone.placeholder),
+                .align(Alignment.BottomEnd)
+                // Push a rotated square beyond the corner, exactly like a
+                // cropped album sleeve rather than a floating rectangle.
+                .offset(x = 10.dp, y = 12.dp)
+                .size(82.dp)
+                .graphicsLayer { rotationZ = 16f }
+                .clip(RoundedCornerShape(7.dp))
+                .background(Color.White.copy(alpha = .22f)),
         ) {
             item.thumbnailUrl?.let { artwork ->
                 AsyncImage(
                     model = artwork,
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    colorFilter = tone.duotone,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
         }
-        // Pale stripes (Energize's cream, Feel good's mint) would swallow
-        // white type; a soft shade under the title keeps it legible.
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = .24f), .62f to Color.Transparent)),
-        )
         Text(
             text = item.title,
-            style = MaterialTheme.typography.titleMedium.copy(
-                shadow = Shadow(Color.Black.copy(alpha = .35f), offset = Offset(0f, 1f), blurRadius = 6f),
-            ),
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = Color.White,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(end = 48.dp),
         )
     }
 }
 
-private class MoodTone(val stripe: Color, val placeholder: Color, val duotone: ColorFilter)
-
-private fun moodTone(item: MoodGenre): MoodTone {
-    val base = item.stripeColor?.let { Color(it.toInt()) } ?: fallbackMoodColor(item.title)
-    // YouTube's palette is already pastel; a touch of black keeps it from
-    // glowing against the black page.
-    val stripe = lerp(base, Color.Black, .08f)
-    val shadow = lerp(base, Color.Black, .68f)
-    val highlight = lerp(base, Color.White, .32f)
-    return MoodTone(
-        stripe = stripe,
-        placeholder = lerp(shadow, highlight, .45f),
-        duotone = duotone(shadow, highlight),
-    )
-}
-
-/**
- * Maps each pixel's luminance onto the ramp [shadow] to [highlight]. Offsets
- * are in 0..255, which Compose honours on Skia too (it rescales them).
- */
-private fun duotone(shadow: Color, highlight: Color): ColorFilter {
-    fun channel(from: Float, to: Float): FloatArray {
-        val span = to - from
-        return floatArrayOf(span * .299f, span * .587f, span * .114f, 0f, from * 255f)
-    }
-    return ColorFilter.colorMatrix(
-        ColorMatrix(
-            channel(shadow.red, highlight.red) +
-                channel(shadow.green, highlight.green) +
-                channel(shadow.blue, highlight.blue) +
-                floatArrayOf(0f, 0f, 0f, 1f, 0f),
-        ),
-    )
-}
-
-/** For a button that came without YouTube's colour: muted, never neon. */
-private fun fallbackMoodColor(title: String): Color = when ((title.hashCode() and Int.MAX_VALUE) % 8) {
-    0 -> Color(0xFFCC6A55)
-    1 -> Color(0xFFC07A92)
-    2 -> Color(0xFF9C8AC0)
-    3 -> Color(0xFF8090C8)
-    4 -> Color(0xFFD0A060)
-    5 -> Color(0xFF6A88B0)
-    6 -> Color(0xFF7AAED0)
-    else -> Color(0xFF86B890)
-}
-
-/** Gap between mood cards, in both directions. */
-private val MOOD_SPACING = 12.dp
-
-private val MOOD_CARD_SHAPE = RoundedCornerShape(18.dp)
-
-/** Width over height; a two-column phone row lands at about 100dp tall. */
-private const val MOOD_CARD_ASPECT = 1.72f
-
-/** How much of the card the solid stripe covers before the artwork starts. */
-private const val MOOD_STRIPE_FRACTION = .28f
-
-/**
- * The narrowest a mood card is let get before the row drops a column.
- *
- * Pitched so every phone still gets its two (the widest, 448dp, has room for
- * 1.8 of these), while a tablet or a window lays out as many as fit rather
- * than two cards each half a screen wide.
- */
-private val MOOD_MIN_CARD_WIDTH = 220.dp
-
-private const val MOOD_MAX_COLUMNS = 6
-
-private fun moodColumns(available: Dp): Int {
-    val row = available - PAGE_GUTTER * 2
-    return ((row + MOOD_SPACING) / (MOOD_MIN_CARD_WIDTH + MOOD_SPACING)).toInt().coerceIn(2, MOOD_MAX_COLUMNS)
+private fun moodColor(title: String): Color = when ((title.hashCode() and Int.MAX_VALUE) % 8) {
+    0 -> Color(0xFFE64A19)
+    1 -> Color(0xFFEC0B65)
+    2 -> Color(0xFF8664AC)
+    3 -> Color(0xFF6B4EFF)
+    4 -> Color(0xFFBE6100)
+    5 -> Color(0xFF233C78)
+    6 -> Color(0xFF4D97E5)
+    else -> Color(0xFFAA267E)
 }
 
 @Composable
-private fun ExploreSkeletonRows(columns: Int) {
+private fun ExploreSkeleton() {
     Column(Modifier.padding(horizontal = PAGE_GUTTER)) {
-        repeat(6) {
+        repeat(5) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(MOOD_SPACING),
-                modifier = Modifier.padding(bottom = MOOD_SPACING),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
             ) {
-                repeat(columns) {
-                    ShimmerBox(Modifier.weight(1f).aspectRatio(MOOD_CARD_ASPECT), MOOD_CARD_SHAPE)
+                repeat(2) {
+                    Box(Modifier.weight(1f).height(100.dp).clip(RoundedCornerShape(8.dp))) {
+                        ShimmerBox(Modifier.fillMaxSize(), RoundedCornerShape(8.dp))
+                        ShimmerBox(
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .offset(x = 10.dp, y = 12.dp)
+                                .size(82.dp)
+                                .graphicsLayer { rotationZ = 16f },
+                            RoundedCornerShape(7.dp),
+                        )
+                    }
                 }
             }
         }

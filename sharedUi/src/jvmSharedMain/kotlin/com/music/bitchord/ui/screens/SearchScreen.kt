@@ -180,7 +180,7 @@ fun SearchScreen(
     // them only while the user is still typing (suggestions visible), so they
     // appear as a dropdown beneath the text completions rather than floating
     // after the search has committed.
-    val showTypeahead = typeaheadResults.isNotEmpty() && suggesting
+    val showTypeahead = false // Tunes: 3.0's Search shows text suggestions only
     LaunchedEffect(listState, results, loadingMore, searchingLibrary) {
         if (results !is UiState.Success || searchingLibrary) return@LaunchedEffect
         snapshotFlow {
@@ -339,10 +339,6 @@ fun SearchScreen(
                                     },
                                     onLongPress = { onSongLongPress(row.song) },
                                     onSwipeToQueue = { onSongSwipe(row.song) },
-                                    isCurrent = row.song.isSameTrackAs(currentSong),
-                                    isPlaying = isPlaying && row.song.isSameTrackAs(currentSong),
-                                    searchPlayingStyle = true,
-                                    activeTint = PlayingAccent,
                                 )
                                 is SearchResult.Browse -> BrowseRow(
                                     item = row.item,
@@ -526,15 +522,14 @@ private fun LazyListScope.searchSuggestions(
     // This is a list-level inset rather than padding hidden inside the first
     // row. It keeps the gap under the field stable even when that row changes
     // its text or icon treatment.
-    item(key = "suggestions:top-inset") { Spacer(Modifier.height(8.dp)) }
-    // Skip the echo of the typed text (element 0) — it's already visible in
-    // the search field itself — and cap at N so the list stays compact above
-    // the playable-media cards.
-    itemsIndexed(suggestions.drop(1).take(3), key = { _, term -> "suggest:$term" }) { _, term ->
+    item(key = "suggestions:top-inset") { Spacer(Modifier.height(12.dp)) }
+    itemsIndexed(suggestions, key = { _, term -> "suggest:$term" }) { index, term ->
         SuggestionRow(
             term = term,
-            isQueryAction = false,
-            onFill = { onFill(term) },
+            isQueryAction = index == 0,
+            // The lead row *is* what's in the field, so there is nothing to
+            // fill it with and the arrow would be a no-op button.
+            onFill = if (index == 0) null else ({ onFill(term) }),
             onClick = { onClick(term) },
         )
     }
@@ -749,28 +744,17 @@ private fun LazyListScope.recentSearches(
         }
     }
     items(history, key = { "recent:${it.id}" }) { entity ->
-        RecentSearchEntityRow(
-            entity = entity,
-            isCurrent = entity.entityType == EntityType.TRACK && entity.id == currentSong?.videoId,
-            isPlaying = isPlaying,
+        RecentSearchRow(
+            term = entity.title,
             onClick = { onClick(entity) },
             onRemove = { onRemove(entity.id) },
         )
     }
 }
 
-/**
- * Spotify-style entity row: square thumbnail, bold title, subtitle with type,
- * and a removal button. Tapping navigates to the entity or plays it directly.
- */
+/** Tunes keeps 3.0's recent searches: the words you searched, not artwork cards. */
 @Composable
-private fun RecentSearchEntityRow(
-    entity: SearchHistoryEntity,
-    isCurrent: Boolean,
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    onRemove: () -> Unit,
-) {
+private fun RecentSearchRow(term: String, onClick: () -> Unit, onRemove: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -778,38 +762,21 @@ private fun RecentSearchEntityRow(
             .padding(start = PAGE_GUTTER, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(52.dp)) {
-            AsyncImage(
-                model = entity.artworkUrl,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .thumbnailBorder(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-            )
-            if (isCurrent && isPlaying) {
-                SearchPlayingBars(Modifier.align(Alignment.Center))
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = entity.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (isCurrent) PlayingAccent else MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = entity.subtitle.ifBlank { entity.entityType.name.lowercase(Locale.ROOT).replaceFirstChar { it.uppercase(Locale.ROOT) } },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Icon(
+            Icons.Rounded.History,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = term,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -819,7 +786,7 @@ private fun RecentSearchEntityRow(
         ) {
             Icon(
                 Icons.Rounded.Close,
-                contentDescription = stringResource(Res.string.recent_search_remove, entity.title),
+                contentDescription = stringResource(Res.string.recent_search_remove, term),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp),
             )

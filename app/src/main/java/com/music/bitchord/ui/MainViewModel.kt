@@ -74,6 +74,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -1798,80 +1799,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Recent searches, kept on device as rich entity records. */
+    /**
+     * Recent searches: the words typed, as in Tunes 3.0. Stored as entities
+     * with a "q:" id; entity records an older 3.1.0 build saved are hidden.
+     */
     val searchHistory: StateFlow<List<SearchHistoryEntity>> = SearchHistory.recent
+        .map { list -> list.filter { it.id.startsWith(QUERY_PREFIX) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SearchHistory.recent.value.filter { it.id.startsWith(QUERY_PREFIX) })
 
-    /**
-     * Records a full entity payload in the history — used when the user taps
-     * a suggestion, result row, or typeahead card so the recents list shows
-     * real artwork and metadata instead of raw text.
-     */
-    fun recordEntity(entity: SearchHistoryEntity) = SearchHistory.record(entity)
-
-    /**
-     * Records a track entity from a search hit.
-     * Checks _typeaheadResults first (live media while typing), then _results
-     * (committed search). Falls back to recording the raw query if no song data
-     * is available.
-     */
-    fun recordSearch() {
-        val q = _query.value.trim()
+    private fun recordQuery(term: String = _query.value) {
+        val q = term.trim()
         if (q.isEmpty()) return
-        // Prefer typeahead results — they are live and always available while typing.
-        val fromTypeahead = _typeaheadResults.value.firstOrNull {
-            it is SearchResult.TopTrack || it is SearchResult.Track
-        }
-        if (fromTypeahead is SearchResult.Track) {
-            recordEntity(SearchHistoryEntity(
-                id = fromTypeahead.song.videoId,
-                title = fromTypeahead.song.title,
-                subtitle = listOfNotNull(fromTypeahead.song.artist).joinToString(" · "),
-                artworkUrl = fromTypeahead.song.thumbnailUrl,
-                entityType = EntityType.TRACK,
-            ))
-            return
-        }
-        if (fromTypeahead is SearchResult.TopTrack) {
-            recordEntity(SearchHistoryEntity(
-                id = fromTypeahead.song.videoId,
-                title = fromTypeahead.song.title,
-                subtitle = listOfNotNull(fromTypeahead.song.artist).joinToString(" · "),
-                artworkUrl = fromTypeahead.song.thumbnailUrl,
-                entityType = EntityType.TRACK,
-            ))
-            return
-        }
-        // Fall back to committed search results.
-        val topResult = (_results.value as? UiState.Success)?.data?.firstOrNull {
-            it is SearchResult.TopTrack || it is SearchResult.Track
-        }
-        if (topResult is SearchResult.Track) {
-            recordEntity(SearchHistoryEntity(
-                id = topResult.song.videoId,
-                title = topResult.song.title,
-                subtitle = listOfNotNull(topResult.song.artist).joinToString(" · "),
-                artworkUrl = topResult.song.thumbnailUrl,
-                entityType = EntityType.TRACK,
-            ))
-        } else if (topResult is SearchResult.TopTrack) {
-            recordEntity(SearchHistoryEntity(
-                id = topResult.song.videoId,
-                title = topResult.song.title,
-                subtitle = listOfNotNull(topResult.song.artist).joinToString(" · "),
-                artworkUrl = topResult.song.thumbnailUrl,
-                entityType = EntityType.TRACK,
-            ))
-        } else {
-            // Fallback: record as a raw-text entity for backwards compatibility
-            recordEntity(SearchHistoryEntity(
-                id = "q:$q",
-                title = q,
-                subtitle = "",
-                artworkUrl = null,
-                entityType = EntityType.TRACK,
-            ))
-        }
+        SearchHistory.record(SearchHistoryEntity(
+            id = QUERY_PREFIX + q.lowercase(Locale.ROOT),
+            title = q,
+            subtitle = "",
+            artworkUrl = null,
+            entityType = EntityType.TRACK,
+        ))
     }
+
+    /** Opening a result keeps the search that found it (Tunes 3.0 behaviour). */
+    @Suppress("UNUSED_PARAMETER")
+    fun recordEntity(entity: SearchHistoryEntity) = recordQuery()
+
+    fun recordSearch() = recordQuery()
 
     /**
      * Runs a term the user picked out of a list rather than typed — a recent
@@ -1886,6 +1838,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun searchFor(term: String) {
         _query.value = term
+        recordQuery(term)
         searchSubmitted = true
         _suggestions.value = emptyList()
         _typeaheadResults.value = emptyList()
@@ -1927,6 +1880,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun submitSearch() {
         val q = _query.value.trim()
         if (q.isEmpty() || _searchSource.value == SearchSource.LIBRARY) return
+        recordQuery(q)
         searchSubmitted = true
         _suggestions.value = emptyList()
         _typeaheadResults.value = emptyList()
@@ -2300,6 +2254,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        private const val QUERY_PREFIX = "q:"
         /** How many Spotify tracks are looked up on YouTube Music at once. */
         private const val SPOTIFY_MATCH_PARALLELISM = 6
 

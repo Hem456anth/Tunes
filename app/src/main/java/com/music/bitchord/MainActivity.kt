@@ -3171,6 +3171,8 @@ private fun BitChordApp(
                             // History items (onHistoryClick) navigate/play without re-logging.
                             onSuggestionClick = viewModel::searchFor,
                             onHistoryClick = { entity ->
+                                // Tunes: recents are typed searches; tap runs it again.
+                                if (entity.id.startsWith("q:")) viewModel.searchFor(entity.title) else
                                 // Tap a history entity: navigate to it or play it directly.
                                 // Do NOT recordEntity here — tapping an existing history item
                                 // must not update its timestamp and push it to the top.
