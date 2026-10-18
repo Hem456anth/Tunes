@@ -1,3 +1,4 @@
+import { HandoffPanel } from './Handoff';
 import { blockArtist, blockSong, getBlocked, isBlocked, leadArtist } from '../../lib/blocklist';
 // Apple Music-style action sheets, trimmed to the essentials: the song menu
 // (Now Playing ⋯, song rows), album/playlist menus, Add to a Playlist, plus the
@@ -21,7 +22,8 @@ type Sheet =
   | { kind: 'card'; c: Card }
   | { kind: 'playlist-pick'; title: string; tracks: () => Promise<Track[]> }
   | { kind: 'rename'; id: string; title: string }
-  | { kind: 'new-playlist'; tracks?: () => Promise<Track[]> };
+  | { kind: 'new-playlist'; tracks?: () => Promise<Track[]> }
+  | { kind: 'handoff'; t: Track; at: number };
 
 let openFn: ((s: Sheet | null) => void) | null = null;
 let hudFn: ((h: { text: string; icon: string } | null) => void) | null = null;
@@ -167,6 +169,7 @@ export function ActionHost({ player, signedIn, onArtist, onOpen }: { player: Pla
         await createPlaylist(name, ts);
         hud(ts.length ? 'Added to Playlist' : 'Playlist Created', 'playlist-add');
       }} />}
+      {sheet?.kind === 'handoff' && <SheetFrame label="Continue on phone" onClose={close} head={<Head img={sheet.t.thumbnail} title="Continue on Phone" sub={sheet.t.title} onClose={close} />}><HandoffPanel t={sheet.t} position={sheet.at} /></SheetFrame>}
       {sheet?.kind === 'rename' && <NamePrompt label="Rename Playlist" action="Save" initial={sheet.title} onClose={close} onSubmit={async (name) => { await renamePlaylist(sheet.id, name); hud('Renamed', 'pencil'); }} />}
       {h && <div className="hud" key={h.n} role="status" aria-live="polite"><Icon name={h.icon} size={40} /><span>{h.text}</span></div>}
     </>
@@ -234,11 +237,12 @@ function SongSheet({ t, opts, player, onClose, open, onArtist }: { t: Track; opt
           await dropFromQueue((x) => isBlocked(x, b));
           hud('Artist Blocked', 'block');
         } },
+    handoff: { id: 'handoff', label: 'Continue on Phone', icon: 'phone', keepOpen: true, run: () => open({ kind: 'handoff', t, at: player.current?.position ?? 0 }) },
     removePl: { id: 'remove-pl', label: 'Remove from Playlist', icon: 'minus-circle', danger: true, run: async () => { await removeFromPlaylist(opts.playlistId!, t.videoId); hud('Removed', 'minus-circle'); } },
   };
   // Only what matters: the star and the moon already sit on Now Playing.
   const order = np
-    ? ['lib', 'playlist', 'shareSong', 'station', 'less', 'block', 'blockArtist']
+    ? ['lib', 'playlist', 'shareSong', ...(isCurrent && !t.podcast ? ['handoff'] : []), 'station', 'less', 'block', 'blockArtist']
     : ['next', 'last', 'lib', 'playlist', 'fav', 'shareSong', 'block', ...(opts.playlistId ? ['removePl'] : [])];
   return (
     <SheetFrame label={`${t.title} options`} onClose={onClose} head={<Head img={t.thumbnail} title={t.title} sub={[t.artists, t.album].filter(Boolean).join(' · ')} />}>

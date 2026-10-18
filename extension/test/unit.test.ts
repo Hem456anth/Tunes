@@ -160,3 +160,16 @@ test('lyrics translation: batching and splitting back into lines', async () => {
   const rm = await lyricExtra('song3', ['Hello'], 'en', 'romanize');
   assert.ok(rm.same, 'Latin lyrics need no romanization');
 });
+
+const { handoffUrl, parseHandoff, parseT } = await import('../src/lib/handoff');
+test('handoff links: position in t=, both directions', () => {
+  assert.equal(handoffUrl({ videoId: 'JGwWNGJdvx8' }, 754.6), 'https://music.youtube.com/watch?v=JGwWNGJdvx8&t=754');
+  assert.equal(handoffUrl({ videoId: 'JGwWNGJdvx8' }, 2), 'https://music.youtube.com/watch?v=JGwWNGJdvx8');
+  assert.equal(handoffUrl({ videoId: 'jsv:abc' }, 50), null);
+  assert.deepEqual(parseHandoff('Shape of You\nhttps://music.youtube.com/watch?v=JGwWNGJdvx8&t=754'), { videoId: 'JGwWNGJdvx8', startAt: 754 });
+  assert.deepEqual(parseHandoff('https://youtu.be/JGwWNGJdvx8?t=1m30s'), { videoId: 'JGwWNGJdvx8', startAt: 90 });
+  assert.deepEqual(parseHandoff('music.youtube.com/watch?v=JGwWNGJdvx8'), { videoId: 'JGwWNGJdvx8', startAt: 0 });
+  assert.equal(parseHandoff('shape of you'), null);
+  assert.equal(parseHandoff('https://evil.example/watch?v=JGwWNGJdvx8'), null);
+  assert.equal(parseT('99999999'), 0); assert.equal(parseT('1h2m3s'), 3723);
+});

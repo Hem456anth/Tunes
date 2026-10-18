@@ -150,7 +150,7 @@ export interface Suggestion { kind: 'query' | 'song' | 'artist' | 'album' | 'pla
 // Messages between side panel <-> background <-> helper tab
 export type UiCommand =
   | { type: 'get-state' }
-  | { type: 'play-queue'; tracks: Track[]; index: number }
+  | { type: 'play-queue'; tracks: Track[]; index: number; startAt?: number }
   | { type: 'play-index'; index: number }
   | { type: 'add-next'; track: Track }
   | { type: 'add-queue'; track: Track }

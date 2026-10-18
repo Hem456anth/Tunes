@@ -457,7 +457,7 @@ function armStartTimer(t: Track, token: number, ms = START_TIMEOUT_MS) {
 }
 
 // ---------- queue ----------
-async function playCurrent(fade = 0) {
+async function playCurrent(fade = 0, startAt = 0) {
   const t = state.queue[state.index];
   if (!t) return;
   log('play', t.title, fade ? `crossfade ${fade}s` : '');
@@ -476,7 +476,7 @@ async function playCurrent(fade = 0) {
   if (state.engine === 'direct' && !fade && !seamless) audio({ cmd: 'stop' });
   resumeTried = '';
   // Episodes pick up where you left them.
-  let at = 0;
+  let at = startAt; // a handoff link from the phone carries where to continue
   if (t.podcast) {
     const p = ((await chrome.storage.local.get('podcastProgress')).podcastProgress as Record<string, { pos: number; dur: number; played: boolean }> | undefined)?.[t.videoId];
     if (p && !p.played && p.pos > 5 && (!p.dur || p.pos < p.dur - 15)) at = Math.max(0, p.pos - 3);
@@ -733,7 +733,7 @@ function validCommand(cmd: UiCommand): boolean {
   const idx = (i: unknown, max = n) => Number.isInteger(i) && (i as number) >= 0 && (i as number) < max;
   const isTrack = (t: any) => t && typeof t.videoId === 'string' && typeof t.title === 'string' && typeof t.artists === 'string';
   switch (cmd.type) {
-    case 'play-queue': return Array.isArray(cmd.tracks) && cmd.tracks.length > 0 && cmd.tracks.every(isTrack) && idx(cmd.index, cmd.tracks.length);
+    case 'play-queue': return Array.isArray(cmd.tracks) && cmd.tracks.length > 0 && cmd.tracks.every(isTrack) && idx(cmd.index, cmd.tracks.length) && (cmd.startAt === undefined || (Number.isFinite(cmd.startAt) && cmd.startAt >= 0 && cmd.startAt <= 86400));
     case 'play-index': case 'remove-index': case 'play-next-index': return idx(cmd.index);
     case 'move': return idx(cmd.from) && idx(cmd.to);
     case 'add-next': case 'add-queue': return isTrack(cmd.track);
@@ -792,7 +792,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'play-queue':
         state.queue = cmd.tracks.slice(0, QUEUE_CAP); state.index = Math.min(cmd.index, state.queue.length - 1);
         if (state.shuffle) shuffleRest();
-        await playCurrent(); break;
+        await playCurrent(0, cmd.startAt ?? 0); break;
       case 'play-index': state.index = cmd.index; await playCurrent(); break;
       case 'add-next': state.queue.splice(state.index + 1, 0, cmd.track); touchQueue(); if (state.index < 0) { state.index = 0; await playCurrent(); } break;
       case 'add-queue': state.queue.push(cmd.track); touchQueue(); if (state.index < 0) { state.index = 0; await playCurrent(); } break;

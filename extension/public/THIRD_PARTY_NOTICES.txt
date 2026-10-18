@@ -38,3 +38,6 @@ Both are GPL-3.0, the same license as Tunes. See LICENSE.
 
 ## Data
 Podcast search: Apple iTunes Search API and Apple Podcasts charts (Apple's terms), fyyd (api.fyyd.de). No data is bundled.
+
+## qrcode-generator (QR codes for Continue on Phone)
+MIT License, Copyright (c) 2009 Kazuhiko Arase. https://github.com/kazuhikoarase/qrcode-generator

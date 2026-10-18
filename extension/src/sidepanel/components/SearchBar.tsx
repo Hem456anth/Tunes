@@ -1,6 +1,9 @@
+import { parseHandoff } from '../../lib/handoff';
 import { useEffect, useRef, useState } from 'react';
-import type { Card, Suggestion } from '../../lib/types';
-import { searchSuggestions } from '../../lib/innertube';
+import type { Card, Suggestion, Track } from '../../lib/types';
+import { linkTrack } from '../../lib/handoff';
+import { getQueue, searchSuggestions } from '../../lib/innertube';
+import { send } from '../hooks';
 import { Icon } from './Icon';
 import { playSongWithRadio } from './Items';
 
@@ -72,6 +75,19 @@ export function SearchBar({ value, onSearch, onOpen, onArtist, busy, autoFocus }
   const submit = (v: string) => {
     const term = v.trim();
     if (!term) return;
+    // A song link from the phone (with t=): continue it here at the same second.
+    const h = parseHandoff(term);
+    if (h) {
+      setQ(''); close();
+      void (async () => {
+        // The song's radio when YouTube Music answers; otherwise just the song (autoplay adds radio after it).
+        const q = await getQueue({ videoId: h.videoId }).catch(() => [] as Track[]);
+        const i = q.findIndex((x) => x.videoId === h.videoId);
+        const tracks = i >= 0 ? q.slice(i) : [await linkTrack(h.videoId)];
+        await send({ type: 'play-queue', tracks, index: 0, startAt: h.startAt });
+      })();
+      return;
+    }
     setQ(term); close(); onSearch(term); rememberSearch(term);
   };
   const pick = (r: Row) => {

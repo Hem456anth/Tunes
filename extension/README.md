@@ -79,6 +79,10 @@ src/sidepanel/           React UI
 ```
 
 ## Changes
+### 1.3.1
+- Continue on Phone (Now Playing ⋯): a QR code and link for the song at this second; Tunes for Android 3.1.0 opens it at that spot. Going the other way, share a song from the phone's player and paste the link into search here.
+- QR codes by qrcode-generator (MIT, Kazuhiko Arase).
+
 ### 1.3.0
 - Podcasts (Library → Podcasts, Explore, and a Podcasts chip in Search): top shows in India and search through Apple Podcasts and fyyd, any RSS feed or website address, follow shows, latest episodes, resume where you stopped, 0.75–2× speed, back 15 s and forward 30 s (media keys too), mark played, OPML import and export. Feeds are parsed in Tunes, following AntennaPod's rules (GPL-3.0); episode de-duplication and site-to-feed discovery are ported from Winds (BSD-3-Clause, © 2018 Stream.io Inc). Chrome asks once for permission to read podcast feeds.
 - Don't Play This Song and Block Artist: autoplay, radio and the queue skip them; Settings → Blocked songs and artists to undo.
