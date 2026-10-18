@@ -96,7 +96,7 @@ Optional `local.properties` keys: `LASTFM_API_KEY`, `LASTFM_SECRET`,
 - **Gapless playback with crossfade** (0–12 s) and **Automix [Beta]**: DJ-style transitions with beat-matching.
 - **Offline downloads** with embedded metadata, plus your **local music**, SMB and WebDAV libraries.
 - **Background playback**, lock-screen and Bluetooth controls, Android Auto, widgets and Chromecast.
-- **Podcasts** and **Continue from Chrome**: open a link from Tunes for Chrome and pick up at the same second.
+- **Continue from Chrome**: open a link from Tunes for Chrome and pick up at the same second.
 
 #### Lyrics and look
 - **Word-synced lyrics** from many providers, with translation and romanization.
