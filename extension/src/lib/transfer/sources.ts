@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../net';
 // Readers for the services you're moving from. They use the sessions already
 // signed in in Chrome (an open.spotify.com / music.apple.com tab), the same
 // way the YouTube Music account works: no passwords, no API keys.
@@ -61,7 +62,7 @@ async function spotifyToken(): Promise<string> {
 async function sp(path: string): Promise<any> {
   const url = path.startsWith('http') ? path : `https://api.spotify.com/v1${path}`;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${await spotifyToken()}` } });
+    const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${await spotifyToken()}` } }, 15000, 'Spotify');
     if (res.status === 401 || res.status === 403) {
       spToken = null;
       if (attempt >= 1) throw new NeedsSignIn('spotify'); // fresh token still refused: not a signed-in session
@@ -109,7 +110,7 @@ export async function spotifyLink(url: string): Promise<{ title: string; image?:
   // The public embed page needs no sign-in (it lists up to ~100 songs).
   let embed: { title: string; image?: string; tracks: SourceTrack[] } | null = null;
   try {
-    const html = await (await fetch(`https://open.spotify.com/embed/${m[1]}/${m[2]}`)).text();
+    const html = await (await fetchWithTimeout(`https://open.spotify.com/embed/${m[1]}/${m[2]}`, {}, 15000, 'Spotify')).text();
     const json = html.match(/<script id="__NEXT_DATA__" type="application\/json">(.+?)<\/script>/s)?.[1];
     const ent = json ? JSON.parse(json)?.props?.pageProps?.state?.data?.entity : null;
     if (ent?.trackList?.length) embed = {
@@ -147,7 +148,7 @@ async function appleTokens() {
 async function ap(path: string): Promise<any> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const t = await appleTokens();
-    const res = await fetch(`https://amp-api.music.apple.com${path}`, { headers: { Authorization: `Bearer ${t.dev}`, 'Media-User-Token': t.user } });
+    const res = await fetchWithTimeout(`https://amp-api.music.apple.com${path}`, { headers: { Authorization: `Bearer ${t.dev}`, 'Media-User-Token': t.user } }, 15000, 'Apple Music');
     if (res.status === 401 || res.status === 403) { am = null; continue; }
     if (res.status === 429) { await sleep(2000); continue; }
     if (!res.ok) throw new Error(`Apple Music answered ${res.status}`);

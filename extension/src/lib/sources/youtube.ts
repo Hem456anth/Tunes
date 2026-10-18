@@ -55,49 +55,60 @@ export interface ResolvedStream {
 export type SetPlayerUa = (ua: string) => Promise<void>;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export async function resolveYouTube(videoId: string, setUa: SetPlayerUa, maxKbps = Infinity): Promise<ResolvedStream> {
+// The /player User-Agent rule is shared, so two lookups (the playing song and
+// a prefetch) must never interleave: run them one at a time.
+let lane: Promise<unknown> = Promise.resolve();
+export function resolveYouTube(videoId: string, setUa: SetPlayerUa, maxKbps = Infinity): Promise<ResolvedStream> {
+  const run = lane.then(() => resolveYouTubeNow(videoId, setUa, maxKbps));
+  lane = run.catch(() => {});
+  return run;
+}
+
+async function resolveYouTubeNow(videoId: string, setUa: SetPlayerUa, maxKbps: number): Promise<ResolvedStream> {
   const errors: string[] = [];
   for (const c of CLIENTS) {
     try {
-      await setUa(c.userAgent); // DNR rewrites UA for /player + googlevideo
+      await setUa(c.userAgent); // DNR rewrites the UA of /player (the media UA is set only for the song that plays)
       const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 7000);
-      const res = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-        method: 'POST',
-        signal: ctl.signal,
-        credentials: 'omit',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-YouTube-Client-Name': c.clientNameId,
-          'X-YouTube-Client-Version': c.clientVersion,
-        },
-        body: JSON.stringify({
-          context: { client: { clientName: c.clientName, clientVersion: c.clientVersion, hl: 'en', gl: 'IN', ...c.extra } },
-          videoId,
-          contentCheckOk: true,
-          racyCheckOk: true,
-        }),
-      });
-      clearTimeout(timer);
-      if (!res.ok) { errors.push(`${c.id}: HTTP ${res.status}`); if (res.status === 403) break; continue; }
-      const d: any = await res.json();
-      const status = d?.playabilityStatus?.status;
-      if (status !== 'OK') { errors.push(`${c.id}: ${status} ${d?.playabilityStatus?.reason ?? ''}`); continue; }
-      const audio: any[] = (d?.streamingData?.adaptiveFormats ?? []).filter((f: any) => f.mimeType?.startsWith('audio/') && f.url);
-      if (!audio.length) { errors.push(`${c.id}: no plain audio URLs`); continue; }
-      // Highest bitrate under the ceiling; Chrome plays both Opus/WebM (251) and AAC/MP4 (140).
-      audio.sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0));
-      const pick = audio.find((f) => (f.bitrate ?? 0) / 1000 <= maxKbps) ?? audio[audio.length - 1];
-      return {
-        url: pick.url,
-        mimeType: pick.mimeType,
-        kbps: Math.round((pick.averageBitrate ?? pick.bitrate ?? 0) / 1000),
-        source: 'youtube',
-        client: c.id,
-        userAgent: c.userAgent,
-        durationSec: Number(d?.videoDetails?.lengthSeconds) || undefined,
-        loudnessDb: pick.loudnessDb,
-      };
+      const timer = setTimeout(() => ctl.abort(), 8000); // covers the body too
+      try {
+        const res = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+          method: 'POST',
+          signal: ctl.signal,
+          credentials: 'omit',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-YouTube-Client-Name': c.clientNameId,
+            'X-YouTube-Client-Version': c.clientVersion,
+          },
+          body: JSON.stringify({
+            context: { client: { clientName: c.clientName, clientVersion: c.clientVersion, hl: 'en', gl: 'IN', ...c.extra } },
+            videoId,
+            contentCheckOk: true,
+            racyCheckOk: true,
+          }),
+        });
+        // A 403 is often specific to one client version: try the next client.
+        if (!res.ok) { errors.push(`${c.id}: HTTP ${res.status}`); continue; }
+        const d: any = await res.json();
+        const status = d?.playabilityStatus?.status;
+        if (status !== 'OK') { errors.push(`${c.id}: ${status} ${d?.playabilityStatus?.reason ?? ''}`); continue; }
+        const audio: any[] = (d?.streamingData?.adaptiveFormats ?? []).filter((f: any) => f.mimeType?.startsWith('audio/') && f.url);
+        if (!audio.length) { errors.push(`${c.id}: no plain audio URLs`); continue; }
+        // Highest bitrate under the ceiling; Chrome plays both Opus/WebM (251) and AAC/MP4 (140).
+        audio.sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0));
+        const pick = audio.find((f) => (f.bitrate ?? 0) / 1000 <= maxKbps) ?? audio[audio.length - 1];
+        return {
+          url: pick.url,
+          mimeType: pick.mimeType,
+          kbps: Math.round((pick.averageBitrate ?? pick.bitrate ?? 0) / 1000),
+          source: 'youtube',
+          client: c.id,
+          userAgent: c.userAgent,
+          durationSec: Number(d?.videoDetails?.lengthSeconds) || undefined,
+          loudnessDb: pick.loudnessDb,
+        };
+      } finally { clearTimeout(timer); }
     } catch (e: any) {
       errors.push(`${c.id}: ${e?.name === 'AbortError' ? 'timed out' : e?.message ?? e}`);
     }

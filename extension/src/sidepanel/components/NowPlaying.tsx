@@ -191,11 +191,19 @@ export function NowPlaying({ s, settings, onArtist }: { s: PlayerState; settings
         </button>
       </div>
       <Seek s={s} />
-      {(s.resolving || s.error || settings.showStats || s.stream?.includes('· ad playing')) && (
-        <div className="nerd" title="Stats for nerds">
-          {s.resolving ? <><span className="spinner sm" /> Finding the best stream…</> : s.error ? s.error : s.stream ?? ''}
+      {s.error ? (
+        <div className="np-error" role="alert">
+          <span>{s.error}</span>
+          {s.canRetry && <button className="q-pill" onClick={() => send({ type: 'retry' })}>Retry</button>}
+          {s.errorDetail && <details><summary>Details</summary><code>{s.errorDetail}</code></details>}
         </div>
-      )}
+      ) : (s.resolving || settings.showStats || s.stream?.includes('· ad playing')) ? (
+        <div className="nerd" title="Stats for nerds" aria-live="polite">
+          {s.resolving ? <><span className="spinner sm" /> Finding the best stream…</> : s.stream ?? ''}
+        </div>
+      ) : s.quality ? (
+        <div className="np-quality" title={s.stream ?? undefined}><span className="q-badge">{s.quality}</span></div>
+      ) : null}
       <Controls s={s} />
       <div className="np-bottom">
         <span className="np-side">

@@ -85,15 +85,73 @@ async function call(endpoint: string, body: Record<string, unknown>, query = '')
   let res: Response;
   try {
     res = await go(true);
-    if (!res.ok && auth) res = await go(false); // stale session: fall back to guest
+    if (!res.ok && auth && (res.status === 401 || res.status === 403)) {
+      // Stale session: carry on as a guest, but say so (Settings shows "Sign in again").
+      res = await go(false);
+      if (res.ok) noteSession(false);
+    } else if (res.ok && auth) noteSession(true);
   } catch (e: any) {
     if (e?.name === 'AbortError') throw new Error('YouTube Music took too long to answer');
-    throw new Error('No connection to YouTube Music');
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) throw new Error('You’re offline');
+    throw new Error('Couldn’t reach YouTube Music');
   }
-  if (!res.ok) throw new Error(`YouTube Music ${endpoint} failed (${res.status})`);
-  const d = await res.json();
+  if (!res.ok) throw new Error(res.status === 429 ? 'YouTube Music is busy, try again in a minute' : `YouTube Music ${endpoint} failed (${res.status})`);
+  let d: J;
+  try { d = await res.json(); } catch { throw new Error('YouTube Music sent an unreadable answer'); }
   rememberVisitor(d);
   return d;
+}
+
+/** Remember whether the signed-in session still works, so the UI can offer "Sign in again". */
+let sessionOk: boolean | null = null;
+function noteSession(ok: boolean) {
+  if (ok === sessionOk) return;
+  sessionOk = ok;
+  try { chrome.storage.session.set({ ytSessionExpired: !ok }); } catch { /* node tests */ }
+}
+
+/** Continuation token of a shelf or panel, in either of YouTube's two shapes. */
+function contToken(x: J): string | undefined {
+  const last = x?.contents?.[x.contents.length - 1]?.continuationItemRenderer;
+  return last?.continuationEndpoint?.continuationCommand?.token
+    ?? x?.continuations?.[0]?.nextContinuationData?.continuation
+    ?? undefined;
+}
+/** Items of a continuation answer, plus the next token. */
+function contPage(c: J): { items: J[]; next?: string } {
+  const act = (c?.onResponseReceivedActions ?? []).map((a: J) => a.appendContinuationItemsAction).find(Boolean);
+  if (act) {
+    const items: J[] = act.continuationItems ?? [];
+    const next = items[items.length - 1]?.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
+    return { items, next };
+  }
+  const cc = c?.continuationContents;
+  const sh = cc?.musicPlaylistShelfContinuation ?? cc?.musicShelfContinuation ?? cc?.playlistPanelContinuation;
+  return { items: sh?.contents ?? [], next: sh?.continuations?.[0]?.nextContinuationData?.continuation };
+}
+/** Long playlists come in pages of ~100: follow them, up to a sane cap. */
+export const MAX_COLLECTION = 1000;
+async function followPages(endpoint: 'browse' | 'next', first: J[], token: string | undefined, have: number): Promise<J[]> {
+  const out = [...first];
+  let t = token;
+  for (let page = 0; t && have + out.length < MAX_COLLECTION && page < 15; page++) {
+    let c: J;
+    try {
+      c = endpoint === 'browse'
+        ? await call('browse', { continuation: t })
+        : await call('next', { continuation: t, isAudioOnly: true });
+      let p = contPage(c);
+      if (!p.items.length && endpoint === 'browse') {
+        // older shape: the token goes in the query string
+        c = await call('browse', {}, `&ctoken=${encodeURIComponent(t)}&continuation=${encodeURIComponent(t)}&type=next`);
+        p = contPage(c);
+      }
+      if (!p.items.length) break;
+      out.push(...p.items);
+      t = p.next;
+    } catch { break; } // keep what we have
+  }
+  return out;
 }
 
 // ---------- helpers ----------
@@ -445,9 +503,14 @@ export async function getQueue(opts: { videoId?: string; playlistId?: string; pa
   const panel =
     d?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer;
   const tracks: Track[] = [];
-  for (const it of panel?.contents ?? []) {
+  // A playlist or album plays in full; a radio stays one page (autoplay refills it).
+  const isRadio = !opts.playlistId || /^RD/.test(String(body.playlistId));
+  const items: J[] = isRadio ? panel?.contents ?? [] : await followPages('next', panel?.contents ?? [], contToken(panel), 0);
+  const seen = new Set<string>();
+  for (const it of items) {
     const v = it.playlistPanelVideoRenderer ?? it.playlistPanelVideoWrapperRenderer?.primaryRenderer?.playlistPanelVideoRenderer;
-    if (!v?.videoId) continue;
+    if (!v?.videoId || seen.has(v.videoId)) continue;
+    seen.add(v.videoId);
     const byline: J[] = v.longBylineText?.runs ?? [];
     const artistRuns = byline.filter((x) => x.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('UC'));
     const artists = artistRuns.map((x) => x.text);
@@ -471,8 +534,12 @@ export async function playlistIdForCard(card: Card): Promise<string | undefined>
   if (card.browseId.startsWith('VL')) return card.browseId.slice(2);
   if (card.browseId.startsWith('MPRE')) {
     const d = await call('browse', { browseId: card.browseId });
-    const m = JSON.stringify(d).match(/"playlistId":"(OLAK5uy_[^"]+)"/);
-    return m?.[1];
+    // Prefer the album's own play button; the whole answer also lists other albums.
+    const two = d?.contents?.twoColumnBrowseResultsRenderer;
+    const header = two?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0];
+    const own = (header ? JSON.stringify(header) : '').match(/"playlistId":"(OLAK5uy_[^"]+)"/)?.[1]
+      ?? d?.microformat?.microformatDataRenderer?.urlCanonical?.match(/list=(OLAK5uy_[\w-]+)/)?.[1];
+    return own ?? JSON.stringify(d).match(/"playlistId":"(OLAK5uy_[^"]+)"/)?.[1];
   }
   return undefined;
 }
@@ -506,7 +573,8 @@ export async function getCollection(card: Card): Promise<Collection> {
     sectionsOf(d).map((s: J) => s.musicShelfRenderer ?? s.musicPlaylistShelfRenderer).find(Boolean);
   const isAlbum = browseId.startsWith('MPRE');
   const tracks: Track[] = [];
-  for (const it of shelf?.contents ?? []) {
+  const rows = await followPages('browse', shelf?.contents ?? [], contToken(shelf), 0);
+  for (const it of rows) {
     const r = it.musicResponsiveListItemRenderer;
     if (!r) continue;
     const p = parseListItem(r);

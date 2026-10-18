@@ -66,6 +66,7 @@ bundled with esbuild.
 ```
 npm install
 npm run build   # dist/
+npm test        # unit tests (node:test, no browser needed)
 npm run zip     # tunes.zip
 ```
 
@@ -77,7 +78,18 @@ src/lib/                 YouTube Music client, sources, lyrics, library, transfe
 src/sidepanel/           React UI
 ```
 
+## Changes
+### 1.2.0
+- Reliability: every network call has a deadline (8–20 s), a stuck source moves on to the next one, a YouTube 403 tries the next client, and preloading the next song can't break the one playing.
+- Long playlists and albums load in full (continuation pages, up to 1,000 songs).
+- The queue is saved at most once a second and capped at 1,000 songs; position ticks no longer resend the whole queue.
+- Plain-language errors with Retry, and the technical reason under Details.
+- Settings → Import data restores a Tunes export (merges, never deletes; your Last.fm/ListenBrainz keys are kept).
+- Quality badge under the seek bar (for example "320 kbps · AAC").
+- Fixed: "Still Alive" was treated as a live version, and similar substring matches.
+- Unit tests and CI.
+
 ## License and credits
-GPL-3.0 (see [LICENSE](../LICENSE)). Tunes adapts ideas and code from the GPL-3.0
+GPL-3.0 (see LICENSE). Tunes adapts ideas and code from the GPL-3.0
 [BitChord](https://github.com/kushagrasinghx/BitChord) project. It isn't affiliated with YouTube,
 Google, Apple or Spotify.

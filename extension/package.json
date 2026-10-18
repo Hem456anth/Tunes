@@ -1,6 +1,6 @@
 {
   "name": "tunes",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "private": true,
   "license": "GPL-3.0-only",
   "type": "module",
@@ -9,7 +9,8 @@
     "dev": "vite build --watch",
     "zip": "cd dist && zip -r ../tunes.zip .",
     "build:mobile": "node mobile/build-mobile.mjs && npx cap sync android",
-    "apk": "npm run build:mobile && cd android && ./gradlew assembleRelease"
+    "apk": "npm run build:mobile && cd android && ./gradlew assembleRelease",
+    "test": "node scripts/test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",

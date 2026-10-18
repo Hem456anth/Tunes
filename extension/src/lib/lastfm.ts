@@ -2,6 +2,7 @@
 // auth.getToken -> user approves on last.fm -> auth.getSession. Uses the
 // user's own API key + shared secret, so nothing secret ships in the extension.
 import MD5 from 'crypto-js/md5';
+import { fetchWithTimeout } from './net';
 
 const API = 'https://ws.audioscrobbler.com/2.0/';
 
@@ -16,8 +17,8 @@ async function call(method: string, params: Record<string, string>, key: string,
   p.format = 'json';
   const body = new URLSearchParams(p);
   const res = post
-    ? await fetch(API, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
-    : await fetch(`${API}?${body}`);
+    ? await fetchWithTimeout(API, { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }, 10000, 'Last.fm')
+    : await fetchWithTimeout(`${API}?${body}`, {}, 10000, 'Last.fm');
   const d = await res.json().catch(() => ({}));
   if (d?.error) throw new Error(`Last.fm: ${d.message ?? d.error}`);
   if (!res.ok) throw new Error(`Last.fm answered ${res.status}`);

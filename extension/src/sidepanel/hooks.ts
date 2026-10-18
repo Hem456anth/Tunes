@@ -32,7 +32,18 @@ export function usePlayer(): PlayerState | null {
     let pushed = false; // a broadcast that beats the get-state reply is newer
     send({ type: 'get-state' }).then((r) => { if (r && !pushed) setS(r); });
     // Only the service worker broadcasts state (a content script's message has sender.tab).
-    const fn = (msg: any, sender: chrome.runtime.MessageSender) => { if (msg?.type === 'state' && !sender.tab && sender.id === chrome.runtime.id) { pushed = true; setS(msg.state); } };
+    // Position ticks leave the queue out (it's resent only when it changes):
+    // keep the queue we have, so Up Next doesn't re-render 2.5 times a second.
+    const fn = (msg: any, sender: chrome.runtime.MessageSender) => {
+      if (msg?.type !== 'state' || sender.tab || sender.id !== chrome.runtime.id) return;
+      const next = msg.state as PlayerState;
+      if (next.queue) { pushed = true; setS(next); return; }
+      setS((prev) => {
+        if (prev) { pushed = true; return { ...next, queue: prev.queue }; }
+        send({ type: 'get-state' }).then((r) => { if (r) setS((p) => p ?? r); });
+        return prev;
+      });
+    };
     chrome.runtime.onMessage.addListener(fn);
     return () => chrome.runtime.onMessage.removeListener(fn);
   }, []);

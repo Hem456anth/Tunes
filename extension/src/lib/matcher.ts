@@ -5,6 +5,7 @@
 // runtime within tolerance.
 
 const VERSION_WORDS = ['remix', 'live', 'acoustic', 'unplugged', 'reprise', 'slowed', 'reverb', 'sped up', 'lofi', 'lo-fi', 'instrumental', 'karaoke', 'cover', 'female version', 'male version', 'remastered', 'extended', 'mashup', '8d', 'eclipsa', 'dolby', 'atmos', 'spatial', 'immersive', 'bass boosted', 'nightcore', 'mix', 'radio edit', 'lofi flip', 'version', 'dj ', 'telugu', 'tamil', 'hindi', 'kannada', 'malayalam', 'marathi', 'bengali', 'punjabi', 'bhojpuri'];
+const VERSION_RE = new Map(VERSION_WORDS.map((v) => [v, new RegExp(`(^|[^\\p{L}\\p{N}])${v.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^\\p{L}\\p{N}])`, 'u')]));
 const NOISE = /\b(official|video|audio|lyrics?|lyrical|full song|hd|4k|visuali[sz]er|music video|from)\b/g;
 
 const norm = (s: string) =>
@@ -14,7 +15,8 @@ export interface TitleParts { words: string; versions: Set<string> }
 
 export function titleParts(title: string): TitleParts {
   const t = norm(title);
-  const versions = new Set(VERSION_WORDS.filter((v) => t.includes(v)));
+  // Whole words only: "live" is not in "alive", "cover" not in "discover", "mix" not in "remix".
+  const versions = new Set(VERSION_WORDS.filter((v) => VERSION_RE.get(v)!.test(t)));
   // Drop bracketed context and "- From ..." tails, then noise words.
   const words = t
     .replace(/\(.*?\)|\[.*?\]/g, ' ')

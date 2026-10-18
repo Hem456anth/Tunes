@@ -3,6 +3,7 @@
 // it reuses the sessions you already have in Chrome: you sign in on the
 // provider's own page, and Tunes reads the session cookies from there.
 import { getAccountInfo, type AccountInfo } from './innertube';
+import { fetchWithTimeout } from './net';
 
 export interface GoogleAccount { index: number; name: string; email: string; photo: string; signedIn: boolean }
 
@@ -46,7 +47,7 @@ export async function googleAccounts(): Promise<GoogleAccount[]> {
   const sid = (await anyCookie('google.com', ['SID', '__Secure-3PSID', '__Secure-1PSID'])) ?? (await cookie('https://accounts.google.com', 'SID'));
   if (!sid) return [];
   try {
-    const res = await fetch('https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard', { credentials: 'include' });
+    const res = await fetchWithTimeout('https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard', { credentials: 'include' }, 8000, 'Google accounts');
     const raw = await res.text();
     const data = JSON.parse(raw.replace(/^\)\]\}'\n?/, ''));
     const list: unknown[][] = Array.isArray(data?.[1]) ? data[1] : [];

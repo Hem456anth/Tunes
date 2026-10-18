@@ -13,7 +13,9 @@ import { resolveYouTube, type ResolvedStream } from '../lib/sources/youtube';
 import { bestRendition, decryptMediaUrl, resolveSaavn } from '../lib/sources/jiosaavn';
 import { getQueue, getTrackDetails, searchSongs } from '../lib/innertube';
 import { best, score, toSeconds } from '../lib/matcher';
-import { installStaticRules, setNativeUserAgent, syncYouTubeCookies } from './rules';
+import { installStaticRules, setMediaUserAgent, setPlayerUserAgent, syncYouTubeCookies } from './rules';
+import { fetchWithTimeout, withTimeout } from '../lib/net';
+import { friendlyPlayError } from '../lib/errors';
 
 const START_TIMEOUT_MS = 7000;
 const PREFETCH_TTL_MS = 25 * 60 * 1000;
@@ -32,11 +34,11 @@ let startTimer: ReturnType<typeof setTimeout> | null = null;
 let triedSources = new Set<string>();
 let failReasons: string[] = [];
 let switchingToken = -1; // a source switch is already running for this load
-const restored: Promise<void> = restore();
+const restored: Promise<void> = restore().then(() => cfgReady);
 
 // Settings, kept in memory: read on every audio tick (crossfade, scrobbling).
 let cfg: Settings = { ...DEFAULT_SETTINGS };
-void getSettings().then((x) => { cfg = x; });
+const cfgReady = getSettings().then((x) => { cfg = x; }).catch(() => {});
 chrome.storage.onChanged.addListener((c) => {
   if (!c.settings) return;
   getSettings().then((x) => {
@@ -106,19 +108,57 @@ async function closeOldHelperTabs() {
   chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [20] }).catch(() => {});
 }
 
+// The queue is saved at most once a second, and only when it changed; the
+// small fields (index, volume…) are cheap. Before 1.2.0 the whole queue (up to
+// 5,000 songs) was rewritten on every command, including each volume-drag frame.
+export const QUEUE_CAP = 1000;
+let queueSaved: Track[] | null = null;
+let queueLen = -1;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSaveAt = 0;
+function capQueue() {
+  // Autoplay keeps adding songs; drop the oldest already-played ones beyond the cap.
+  const extra = state.queue.length - QUEUE_CAP;
+  if (extra <= 0) return;
+  const drop = Math.min(extra, Math.max(0, state.index - 50));
+  if (drop > 0) { state.queue.splice(0, drop); state.index -= drop; }
+  if (state.queue.length > QUEUE_CAP) state.queue.length = QUEUE_CAP;
+}
+function writeNow() {
+  saveTimer = null; lastSaveAt = Date.now();
+  const small = { index: state.index, shuffle: state.shuffle, repeat: state.repeat, volume: state.volume };
+  const queueChanged = queueSaved !== state.queue || queueLen !== state.queue.length || queueDirty;
+  if (queueChanged) { queueSaved = state.queue; queueLen = state.queue.length; queueDirty = false; }
+  chrome.storage.local.set(queueChanged ? { ...small, queue: state.queue } as Record<string, unknown> : small).catch((e) => log('save failed', String(e)));
+  chrome.storage.session.set({ engine: state.engine, loadToken, position: state.position, duration: state.duration }).catch(() => {});
+}
+let queueDirty = false;
+/** Mark the queue edited in place (splice/push keep the same array). */
+const touchQueue = () => { queueDirty = true; sentDirty = true; capQueue(); };
 function persist() {
-  chrome.storage.local.set({ queue: state.queue, index: state.index, shuffle: state.shuffle, repeat: state.repeat, volume: state.volume });
-  chrome.storage.session.set({ engine: state.engine, loadToken, position: state.position, duration: state.duration });
+  if (saveTimer) return;
+  const wait = Math.max(0, 1000 - (Date.now() - lastSaveAt));
+  saveTimer = setTimeout(writeNow, wait);
 }
 
+// Broadcasts send the queue only when it changed (queueVersion tells the
+// panel); the 400 ms position ticks carry just the small fields.
 let bTimer: ReturnType<typeof setTimeout> | null = null;
+let sentQueue: Track[] | null = null, sentLen = -1, queueVersion = 0;
 function broadcast() {
   if (bTimer) return;
   bTimer = setTimeout(() => {
     bTimer = null;
-    chrome.runtime.sendMessage({ type: 'state', state }).catch(() => {});
+    if (sentQueue !== state.queue || sentLen !== state.queue.length || sentDirty) { sentQueue = state.queue; sentLen = state.queue.length; sentDirty = false; queueVersion++; }
+    const { queue, ...rest } = state;
+    const full = sentFor !== queueVersion;
+    chrome.runtime.sendMessage({ type: 'state', state: full ? { ...state, queueVersion } : { ...rest, queueVersion } }).catch(() => {});
+    sentFor = queueVersion;
+    void queue;
   }, 50);
 }
+let sentDirty = false, sentFor = -1;
+function snapshot() { return { ...state, queueVersion }; }
 
 // ---------- offscreen audio ----------
 // Chrome 116+: getContexts (offscreen.hasDocument only arrived much later).
@@ -178,6 +218,7 @@ async function playEmbed(t: Track, token: number, startAt = 0): Promise<boolean>
   onEmbed = true; embedAd = false;
   state.engine = 'direct';
   state.stream = 'YouTube player · in Tunes';
+  state.quality = 'YouTube player';
   state.resolving = false;
   lastStream = ''; // nothing to reload by URL: errors go back through the chain
   // The catalogue length lets the player tell a pre-roll ad from the song.
@@ -224,6 +265,11 @@ const describe = (s: ResolvedStream) => {
   return `${s.source === 'jiosaavn' ? 'JioSaavn' : `YouTube (${s.client})`} · ${s.kbps} kbps ${codec}`;
 };
 
+/** Short quality badge for Now Playing: "320 kbps · AAC". */
+const badge = (s: ResolvedStream) => {
+  const codec = /opus/.test(s.mimeType) ? 'Opus' : /mp4a|mp4/.test(s.mimeType) ? 'AAC' : '';
+  return s.kbps ? `${s.kbps} kbps${codec ? ` · ${codec}` : ''}` : codec || null;
+};
 const details = new Map<string, Awaited<ReturnType<typeof getTrackDetails>>>();
 async function enrich(t: Track) {
   if (!isYt(t.videoId)) return {} as Awaited<ReturnType<typeof getTrackDetails>>; // catalogue rows already carry runtime and album
@@ -244,7 +290,7 @@ async function resolveNext(t: Track, order: string[], triedSources: Set<string>,
     if (triedSources.has(src)) continue;
     triedSources.add(src);
     try {
-      const q = (await getSettings()).quality;
+      const q = cfg.quality;
       let tol = 12;
       if (src === 'saavn' && t.saavn) {
         const r = saavnDirect(t, q);
@@ -270,7 +316,8 @@ async function resolveNext(t: Track, order: string[], triedSources: Set<string>,
         // the same length. Music videos get a little slack for intros/outros.
         tol = info.videoType === 'MUSIC_VIDEO_TYPE_ATV' ? 4 : 10;
       }
-      const r = src === 'saavn' ? await resolveSaavn(t, undefined, q, tol) : await resolveYouTube(ytId, setNativeUserAgent, QUALITY_KBPS[q]);
+      // One hard deadline per source: a stuck lookup moves on to the next source.
+      const r = await withTimeout(src === 'saavn' ? resolveSaavn(t, undefined, q, tol) : resolveYouTube(ytId, setPlayerUserAgent, QUALITY_KBPS[q]), 20000, src === 'saavn' ? 'JioSaavn' : 'YouTube');
       log('source', src, r ? `ok ${r.kbps}kbps ${r.url.slice(0, 60)}` : 'no match');
       if (r) { resolved.set(t.videoId, { r, src, at: Date.now() }); if (resolved.size > 40) resolved.delete(resolved.keys().next().value!); return r; }
       failReasons.push(`${src === 'saavn' ? 'JioSaavn' : 'YouTube'}: no match`);
@@ -350,17 +397,20 @@ async function startDirect(t: Track, token: number, startAt = 0): Promise<void> 
     if (!ok) {
       await audio({ cmd: 'stop' });
       state.engine = null; state.playing = false; state.resolving = false;
-      state.error = `Couldn't play this song (${failReasons.join('; ') || 'no source'})`;
+      state.error = friendlyPlayError(failReasons);
+      state.errorDetail = failReasons.join('; ') || 'no source';
+      state.canRetry = true;
     } else if (failReasons.length) state.stream = `YouTube player · in Tunes (${failReasons.join('; ')})`;
     persist(); broadcast();
     return;
   }
-  if (r.userAgent) await setNativeUserAgent(r.userAgent);
+  if (r.userAgent) await setMediaUserAgent(r.userAgent);
   if (token !== loadToken) return; // a newer song started while we waited
   onEmbed = false;
   state.engine = 'direct';
   lastStream = r.url;
   state.stream = describe(r);
+  state.quality = badge(r);
   state.resolving = false;
   state.duration = r.durationSec ?? state.duration;
   await audio({ cmd: 'load', url: r.url, token, volume: state.volume, startAt, fade, meta: { title: t.title, artist: t.artists, album: t.album, artwork: t.thumbnail } });
@@ -394,7 +444,7 @@ async function playCurrent(fade = 0) {
   triedSources = new Set();
   failReasons = [];
   embedTried = new Set();
-  Object.assign(state, { track: t, videoId: t.videoId, position: 0, duration: 0, needsActivation: false, resolving: true, error: null, stream: null });
+  Object.assign(state, { track: t, videoId: t.videoId, position: 0, duration: 0, needsActivation: false, resolving: true, error: null, errorDetail: null, canRetry: false, stream: null, quality: null });
   pushRecent(t);
   persist(); broadcast();
   // Silence the previous song right away instead of letting it run on while
@@ -425,7 +475,7 @@ async function advance(dir: 1 | -1, auto = false, fade = 0) {
         // Songs you asked to hear less of stay out of autoplay.
         const less = new Set(((await chrome.storage.local.get('suggestLess')).suggestLess as string[]) ?? []);
         const more = seed ? (await getQueue({ videoId: seed })).filter((x) => !have.has(x.videoId) && !less.has(x.videoId)) : [];
-        if (more.length) { state.queue.push(...more.slice(0, 25)); state.index = i; return playCurrent(); }
+        if (more.length) { state.queue.push(...more.slice(0, 25)); touchQueue(); state.index++; return playCurrent(); }
       } catch { /* fall through */ }
     }
     if (state.repeat === 'all' || !auto) i = 0; else { state.playing = false; broadcast(); return; }
@@ -440,7 +490,7 @@ function moveItem(from: number, to: number) {
   const n = state.queue.length;
   if (from < 0 || from >= n || to < 0 || to >= n || from === to) return;
   const [item] = state.queue.splice(from, 1);
-  state.queue.splice(to, 0, item);
+  state.queue.splice(to, 0, item); touchQueue();
   if (from === state.index) state.index = to;
   else if (from < state.index && to >= state.index) state.index--;
   else if (from > state.index && to <= state.index) state.index++;
@@ -478,10 +528,10 @@ async function listenbrainz(kind: 'playing_now' | 'single') {
     },
   };
   if (kind === 'single') payload.listened_at = Math.floor(Date.now() / 1000) - Math.round(state.position);
-  fetch('https://api.listenbrainz.org/1/submit-listens', {
+  fetchWithTimeout('https://api.listenbrainz.org/1/submit-listens', {
     method: 'POST', headers: { Authorization: `Token ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ listen_type: kind, payload: [payload] }),
-  }).catch(() => {});
+  }, 10000, 'ListenBrainz').catch(() => {});
 }
 function lastfm(kind: 'now' | 'scrobble') {
   const t = state.track;
@@ -614,7 +664,7 @@ async function resumeTrack() {
   const at = state.position > 2 && (!state.duration || state.position < state.duration - 2) ? state.position : 0;
   const token = ++loadToken;
   triedSources = new Set(); failReasons = []; embedTried = new Set(); resumeTried = '';
-  Object.assign(state, { resolving: true, error: null });
+  Object.assign(state, { resolving: true, error: null, errorDetail: null, canRetry: false });
   log('resume', t.title, 'at', at.toFixed(1));
   persist(); broadcast();
   await startDirect(t, token, at);
@@ -644,32 +694,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const cmd = msg as UiCommand;
     // Player commands only come from Tunes's own pages, and must be well-formed.
     if (!fromExtensionPage(sender) || !cmd?.type) { sendResponse(null); return; }
-    if (!validCommand(cmd)) { log('bad command', cmd.type); sendResponse(state); return; }
+    if (!validCommand(cmd)) { log('bad command', cmd.type); sendResponse(snapshot()); return; }
     // A choice the user made starts a fresh run of "ad-free only" skips.
     if (cmd.type === 'play-queue' || cmd.type === 'play-index' || cmd.type === 'next' || cmd.type === 'prev') adFreeSkips = 0;
     switch (cmd.type) {
-      case 'get-state': sendResponse(state); return;
+      case 'get-state': sendResponse(snapshot()); return;
       case 'play-queue':
-        state.queue = cmd.tracks; state.index = cmd.index;
+        state.queue = cmd.tracks.slice(0, QUEUE_CAP); state.index = Math.min(cmd.index, state.queue.length - 1);
         if (state.shuffle) shuffleRest();
         await playCurrent(); break;
       case 'play-index': state.index = cmd.index; await playCurrent(); break;
-      case 'add-next': state.queue.splice(state.index + 1, 0, cmd.track); if (state.index < 0) { state.index = 0; await playCurrent(); } break;
-      case 'add-queue': state.queue.push(cmd.track); if (state.index < 0) { state.index = 0; await playCurrent(); } break;
+      case 'add-next': state.queue.splice(state.index + 1, 0, cmd.track); touchQueue(); if (state.index < 0) { state.index = 0; await playCurrent(); } break;
+      case 'add-queue': state.queue.push(cmd.track); touchQueue(); if (state.index < 0) { state.index = 0; await playCurrent(); } break;
       case 'add-next-many':
         if (!cmd.tracks.length) break;
-        state.queue.splice(state.index + 1, 0, ...cmd.tracks);
+        state.queue.splice(state.index + 1, 0, ...cmd.tracks); touchQueue();
         if (state.index < 0) { state.index = 0; await playCurrent(); }
         break;
       case 'append': {
         const have = new Set(state.queue.map((x) => x.videoId));
         // Play Last from a menu queues every song, as asked; autoplay radio skips songs already queued.
-        state.queue.push(...(cmd.keepDupes ? cmd.tracks : cmd.tracks.filter((x) => !have.has(x.videoId))));
+        state.queue.push(...(cmd.keepDupes ? cmd.tracks : cmd.tracks.filter((x) => !have.has(x.videoId)))); touchQueue();
         break;
       }
       case 'remove-index':
         if (cmd.index === state.index || cmd.index < 0 || cmd.index >= state.queue.length) break;
-        state.queue.splice(cmd.index, 1);
+        state.queue.splice(cmd.index, 1); touchQueue();
         if (cmd.index < state.index) state.index--;
         break;
       case 'move': moveItem(cmd.from, cmd.to); break;
@@ -678,6 +728,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       case 'clear-upnext': state.queue = state.queue.slice(0, state.index + 1); break;
       case 'toggle': await togglePlay(); break;
+      case 'retry': await resumeTrack(); break;
       case 'next': await advance(1); break;
       case 'prev': await previous(); break;
       case 'seek': await live.seek(cmd.seconds); state.position = cmd.seconds; break;
@@ -689,7 +740,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     persist();
     broadcast();
-    sendResponse(state);
+    sendResponse(snapshot());
   })();
   return true;
 });
@@ -717,3 +768,6 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
 });
 chrome.runtime.onInstalled.addListener(setup);
 chrome.runtime.onStartup.addListener(setup);
+
+// DevTools/test hook: inspect and nudge the live player state from the service worker console.
+(self as unknown as { __tunesDebug: unknown }).__tunesDebug = { state, broadcast: () => broadcast() };

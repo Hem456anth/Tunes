@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from './net';
 // Artwork-driven theming: Tunes extracts a palette from album art. Here we
 // take an average-of-vivid-pixels colour via canvas (image fetched with the
 // extension's host permission so the canvas isn't tainted).
@@ -7,7 +8,7 @@ export async function artworkColor(url: string): Promise<string> {
   if (!url) return '#2a2a35';
   if (cache.has(url)) return cache.get(url)!;
   try {
-    const blob = await (await fetch(url)).blob();
+    const blob = await (await fetchWithTimeout(url, {}, 6000, 'Artwork')).blob();
     const bmp = await createImageBitmap(blob, { resizeWidth: 32, resizeHeight: 32 });
     const c = new OffscreenCanvas(32, 32);
     const ctx = c.getContext('2d')!;

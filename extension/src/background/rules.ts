@@ -94,29 +94,42 @@ export async function syncYouTubeCookies() {
   });
 }
 
-let currentUa = '';
-/** Native-client identity for /player and the googlevideo media fetch that follows it. */
-export async function setNativeUserAgent(ua: string) {
-  if (ua === currentUa) return;
-  currentUa = ua;
-  const headers = [
-    { header: 'User-Agent', operation: SET, value: ua },
-    { header: 'Origin', operation: REMOVE },
-    { header: 'Referer', operation: REMOVE },
-  ];
+// Two separate identities: the /player lookup (changes while songs are
+// resolved, including the prefetch of the next song) and googlevideo media
+// requests (changes only when a stream actually starts playing). Before 1.2.0
+// one shared rule meant a prefetch could re-dress the playing stream's range
+// requests as another client, and googlevideo answered 403 mid-song.
+const nativeHeaders = (ua: string) => [
+  { header: 'User-Agent', operation: SET, value: ua },
+  { header: 'Origin', operation: REMOVE },
+  { header: 'Referer', operation: REMOVE },
+];
+let playerUa = '';
+/** UA for the YouTube /player lookup (ids 2). */
+export async function setPlayerUserAgent(ua: string) {
+  if (ua === playerUa) return;
+  playerUa = ua;
   await R.updateDynamicRules({
-    removeRuleIds: [2, 3],
-    addRules: [
-      {
-        id: 2, priority: 1,
-        action: { type: R.RuleActionType.MODIFY_HEADERS, requestHeaders: headers },
-        condition: { urlFilter: '||www.youtube.com/youtubei/v1/player', initiatorDomains: ext(), resourceTypes: XHR_TYPES },
-      },
-      {
-        id: 3, priority: 1,
-        action: { type: R.RuleActionType.MODIFY_HEADERS, requestHeaders: headers },
-        condition: { urlFilter: '||googlevideo.com/', initiatorDomains: ext(), resourceTypes: [R.ResourceType.MEDIA, ...XHR_TYPES] },
-      },
-    ],
+    removeRuleIds: [2],
+    addRules: [{
+      id: 2, priority: 1,
+      action: { type: R.RuleActionType.MODIFY_HEADERS, requestHeaders: nativeHeaders(ua) },
+      condition: { urlFilter: '||www.youtube.com/youtubei/v1/player', initiatorDomains: ext(), resourceTypes: XHR_TYPES },
+    }],
   });
 }
+let mediaUa = '';
+/** UA for googlevideo media requests: always the client of the stream that is playing (id 3). */
+export async function setMediaUserAgent(ua: string) {
+  if (ua === mediaUa) return;
+  mediaUa = ua;
+  await R.updateDynamicRules({
+    removeRuleIds: [3],
+    addRules: [{
+      id: 3, priority: 1,
+      action: { type: R.RuleActionType.MODIFY_HEADERS, requestHeaders: nativeHeaders(ua) },
+      condition: { urlFilter: '||googlevideo.com/', initiatorDomains: ext(), resourceTypes: [R.ResourceType.MEDIA, ...XHR_TYPES] },
+    }],
+  });
+}
+export const currentMediaUserAgent = () => mediaUa;

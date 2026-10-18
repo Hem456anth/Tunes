@@ -6,3 +6,4 @@ dist-mobile/
 *.jks
 keystore.properties
 android/local.properties
+.test-out/

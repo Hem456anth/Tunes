@@ -9,6 +9,7 @@ import CryptoJS from 'crypto-js';
 import type { Track } from '../types';
 import { best, toSeconds } from '../matcher';
 import type { ResolvedStream } from './youtube';
+import { fetchJson } from '../net';
 
 const API = 'https://www.jiosaavn.com/api.php';
 const DES_KEY = CryptoJS.enc.Utf8.parse('38346591');
@@ -36,9 +37,8 @@ const unescape = (s: string) => s.replace(/&quot;/g, '"').replace(/&amp;/g, '&')
 
 export async function searchSaavn(query: string): Promise<SaavnRow[]> {
   const q = new URLSearchParams({ __call: 'search.getResults', _format: 'json', _marker: '0', api_version: '4', ctx: 'web6dot0', q: query, p: '1', n: '10' });
-  const res = await fetch(`${API}?${q}`, { credentials: 'omit' });
+  const { res, data: d } = await fetchJson<any>(`${API}?${q}`, { credentials: 'omit' }, 8000, 'JioSaavn');
   if (!res.ok) throw new Error(`JioSaavn HTTP ${res.status}`);
-  const d: any = await res.json();
   return (d?.results ?? []).map((r: any) => ({
     title: unescape(r.title ?? ''),
     artist: (r.more_info?.artistMap?.primary_artists ?? []).map((a: any) => unescape(a.name)).join(', '),

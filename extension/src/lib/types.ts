@@ -62,6 +62,14 @@ export interface PlayerState {
   sleepAt: number | null;
   /** Sleep timer: pause when the current song ends */
   sleepEndOfTrack: boolean;
+  /** Bumped whenever the queue changes (broadcasts without a queue keep the last one) */
+  queueVersion?: number;
+  /** Plain-language error has a Retry (the song can be tried again) */
+  canRetry?: boolean;
+  /** Technical reasons behind error (shown under Details) */
+  errorDetail?: string | null;
+  /** Quality badge of the playing stream, e.g. "320 kbps · AAC" */
+  quality?: string | null;
 }
 
 export type SourceOrder = 'saavn-first' | 'youtube-first' | 'youtube-only' | 'tab-only';
@@ -147,6 +155,7 @@ export type UiCommand =
   | { type: 'shuffle' }
   | { type: 'repeat' }
   | { type: 'sleep'; minutes: number } // 0 = off, -1 = end of this song
+  | { type: 'retry' }
   | { type: 'open-tab' };
 
 export type PageCommand =

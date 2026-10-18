@@ -1,3 +1,4 @@
+import { importBackup } from '../../lib/backup';
 // Settings, laid out like Tunes's Android Settings: big title, grouped
 // rounded cards, uppercase section labels, toggles on the right, sub-pages
 // for Account & integrations and Sources, and the Lyrics sources sheet.
@@ -368,6 +369,20 @@ export function SettingsPage({ me, onClose, initial }: { me: AccountInfo | null;
     a.href = URL.createObjectURL(blob); a.download = `tunes-export-${new Date().toISOString().slice(0, 10)}.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   };
+  const importData = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'application/json,.json';
+    input.onchange = async () => {
+      const f = input.files?.[0];
+      if (!f) return;
+      try {
+        const r = await importBackup(await f.text());
+        const n = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
+        flash(`Imported ${n(r.songs, 'song')}, ${n(r.playlists, 'playlist')}, ${n(r.liked, 'favorite')}`);
+      } catch (e) { flash((e as Error).message); }
+    };
+    input.click();
+  };
   const quality = { high: 'High', normal: 'Normal', low: 'Data saver' } as const;
   const srcSummary = [...s.sources.filter((x) => x === 'youtube' || s.jiosaavn).map((x) => (x === 'jiosaavn' ? 'JioSaavn' : 'YouTube Music')), ...(s.adFreeOnly ? [] : ['YouTube player'])].join(' → ');
 
@@ -424,6 +439,7 @@ export function SettingsPage({ me, onClose, initial }: { me: AccountInfo | null;
             {!IS_MOBILE && <Row icon="swap" title="Transfer music" sub="Bring playlists and liked songs from Spotify or Apple Music" onClick={() => setPage('transfer')} />}
             <Row icon="trash" title="Clear cache" sub="Frees space used by saved Home, search and artwork data" onClick={clearCache} />
             {!IS_MOBILE && <Row icon="upload" title="Export data" sub="Settings, likes and listening history, as one JSON file" onClick={exportData} />}
+            {!IS_MOBILE && <Row icon="download" title="Import data" sub="Restore a Tunes export. Merges with what you have; nothing is deleted" onClick={importData} />}
           </Group>
 
           <Group label="Advanced options">
