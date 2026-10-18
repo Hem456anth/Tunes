@@ -1,8 +1,9 @@
 name: Android Release APK
 
+# Release APKs are built and signed locally with the Tunes key and attached to GitHub Releases.
+# This workflow only runs when started by hand (Actions -> Android Release APK -> Run workflow);
+# it signs the APK only when the KEYSTORE_* repository secrets are set.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -25,9 +26,10 @@ jobs:
         echo "LASTFM_API_KEY=${{ secrets.LASTFM_API_KEY }}" > local.properties
         echo "LASTFM_SECRET=${{ secrets.LASTFM_SECRET }}" >> local.properties
 
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > bitchord-release.jks
+        if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then echo "No signing secrets: building unsigned"; exit 0; fi
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > tunes-release.jks
         {
-          echo "storeFile=bitchord-release.jks"
+          echo "storeFile=tunes-release.jks"
           echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
           echo "keyAlias=${{ secrets.KEY_ALIAS }}"
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
@@ -42,5 +44,5 @@ jobs:
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: bitchord-prod-release-signed
+        name: tunes-prod-release
         path: app/build/outputs/apk/prod/release/*.apk

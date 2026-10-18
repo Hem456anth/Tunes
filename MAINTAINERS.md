@@ -1,10 +1,11 @@
 # Maintainers
 
-This document lists the maintainers responsible for BitChord.
+This document lists the maintainers responsible for Tunes and for BitChord, the project it is forked from.
 
 | Maintainer | GitHub | Responsibilities |
 |---|---|---|
-| Kushagra Singh | [@kushagrasinghx](https://github.com/kushagrasinghx) | Project creator, core architecture, release management, and PR reviews |
+| Hemanth Kundrapu | [@Hem456anth](https://github.com/Hem456anth) | Tunes maintainer: Android fork, Chrome extension and releases |
+| Kushagra Singh | [@kushagrasinghx](https://github.com/kushagrasinghx) | BitChord creator (upstream): core architecture, release management, and PR reviews |
 
 ## Responsibilities
 

@@ -4,27 +4,56 @@
 
 # Tunes
 
-### A YouTube Music client for Android, built from BitChord
+### A YouTube Music player for Android and Chrome, built from BitChord
+
+[![Latest release](https://img.shields.io/github/v/release/Hem456anth/Tunes?style=for-the-badge&labelColor=0d1117)](https://github.com/Hem456anth/Tunes/releases/latest)
+[![License](https://img.shields.io/github/license/Hem456anth/Tunes?style=for-the-badge&labelColor=0d1117)](LICENSE)
 
 </div>
 
-Tunes is a fork of [BitChord](https://github.com/kushagrasinghx/BitChord) v1.5.1
-(commit `05f4be9`, tag `v1.5.1`) by Kushagra Singh, released under the
-GNU General Public License v3.0. Tunes stays under GPL-3.0; see `LICENSE`.
-Every feature of BitChord 1.5.1 is kept: playback, downloads, Automix, lyrics,
-Replay, widgets, Android Auto, scrobbling, Discord, local files, sign-in.
+Tunes is a fork of [BitChord](https://github.com/kushagrasinghx/BitChord) by Kushagra Singh,
+released under the GNU General Public License v3.0. Tunes stays under GPL-3.0; see `LICENSE`.
+The Android app is based on BitChord **v1.8** and keeps every BitChord feature: playback,
+downloads, Automix, lyrics, Replay, widgets, Android Auto, scrobbling, Discord, local files,
+Spotify, Chromecast and sign-in. The repository also holds **Tunes for Chrome**, a side-panel
+player extension (see [`extension/`](extension/README.md)).
 
-## Tunes 3.1.0 (18 Oct 2026)
-- Now based on BitChord **v1.8**: Spotify playlists and Liked Songs, Chromecast, built-in equalizer, lyric translation and romanization, Listen Together, SMB/WebDAV libraries, playlist reorder, the redesigned queue and artist pages, and the rest of v1.6–v1.8.
-- Continue from Tunes for Chrome: a YouTube Music link with `t=` (the Chrome extension's Continue on Phone QR code) opens the song at that second. Sharing from the player adds the position, so the extension can continue it too.
-- The desktop app isn't part of Tunes (it bundled Apple's SF Pro fonts, which can't be redistributed; upstream is dropping it too).
-- Same package (app.tunes.music) and signing key as 3.0.x, so it installs over it.
+## Download
+
+- **Android:** get `Tunes-<version>-arm64.apk` from the
+  [latest release](https://github.com/Hem456anth/Tunes/releases/latest) (Android 8.0 or newer,
+  64-bit phones). Allow "Install unknown apps" for the app you open it with. Tunes checks for
+  updates itself and offers new versions in the app.
+- **Chrome:** see [`extension/README.md`](extension/README.md) to load it unpacked.
+- Every Tunes APK is signed with the same key, so updates install over older versions.
+  Certificate SHA-256: `963fa6cdbcedd9d6970b37acb42c28674b45b6215fa62bde799b2ac6eeb1f067`
+
+## What's new
+
+### 3.1.1 (18 Oct 2026)
+- The 3.0 **Explore** is back: grouped sections of colorful two-column mood and genre cards.
+- The 3.0 **Search** is back: text suggestions with a "Search 'term'" row first, no media cards
+  while typing, plain song rows, and recent searches shown as the words you typed.
+- Everything else from 3.1.0 is unchanged.
+
+### 3.1.0 (18 Oct 2026)
+- Now based on BitChord **v1.8**: Spotify playlists and Liked Songs, Chromecast, built-in
+  equalizer, lyric translation and romanization, Listen Together, SMB/WebDAV libraries, playlist
+  reorder, the redesigned queue and artist pages, and the rest of v1.6–v1.8.
+- Continue from Tunes for Chrome: a YouTube Music link with `t=` (the extension's Continue on
+  Phone QR code) opens the song at that second. Sharing from the player adds the position, so the
+  extension can continue it too.
+- The desktop app isn't part of Tunes (it bundled Apple's SF Pro fonts, which can't be
+  redistributed).
+
+### 3.0.0 (17 Oct 2026)
+- First Tunes release, based on BitChord v1.5.1.
 
 ## What Tunes changes (relative to BitChord)
 
 - **Identity:** package `app.tunes.music` (dev flavor `app.tunes.music.dev`),
-  name "Tunes", versionCode 3 / 3.0.0, blue logomark and launcher icon. Installs
-  beside BitChord and over Tunes 2.0.0 (same signing key). Internal Kotlin
+  name "Tunes", version 3.1.1 (versionCode 5), blue logomark and launcher icon. Installs
+  beside BitChord and over every earlier Tunes release (same signing key). Internal Kotlin
   package names stay `com.music.bitchord` to keep the fork easy to rebase.
 - **Blue instead of red:** every red button and accent (delete, sign out, remove
   source, download retry, Replay badges and poster, launcher gradient, logo SVG)
@@ -42,6 +71,8 @@ Replay, widgets, Android Auto, scrobbling, Discord, local files, sign-in.
   User agents, Discord "Visit" button, folders (`Music/Tunes`, `Pictures/Tunes`),
   file names and notifications say Tunes. Settings → About credits BitChord and
   links its repository and developer. BitChord backups still import.
+- **Explore and Search:** kept as in Tunes 3.0 (BitChord v1.5.1): the sectioned mood grid, text-only
+  suggestions and typed recent searches, instead of the v1.8 redesign.
 - **Build:** `TUNES_PREBUILT_NATIVE_DIR` lets hosts without an NDK package
   prebuilt copies of `libbitchord_analysis.so` (built from `native/` and
   `app/src/main/cpp/` in this repo, unchanged) instead of compiling them.
@@ -60,6 +91,9 @@ Optional `local.properties` keys: `LASTFM_API_KEY`, `LASTFM_SECRET`,
 ---
 
 # Upstream README (BitChord)
+
+> The section below is BitChord's own README, kept for credit. Its download, desktop, contributor and
+> support links are BitChord's, not Tunes'.
 
 <div align="center">
 
@@ -157,7 +191,6 @@ Optional `local.properties` keys: `LASTFM_API_KEY`, `LASTFM_SECRET`,
 
 Grab the latest signed APK from the [Releases](https://github.com/kushagrasinghx/BitChord/releases) page. Sideloading requires enabling "Install unknown apps" for whichever app you download it with.
 
-For the Windows and Linux desktop app, see [DESKTOP.md](DESKTOP.md).
 
 </div>
 

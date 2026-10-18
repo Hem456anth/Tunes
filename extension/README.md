@@ -39,25 +39,9 @@ the music keeps going.
 Change keys at `chrome://extensions/shortcuts`.
 
 ## Android app
-Tunes also ships as an Android app (Android 6.0 and newer, built for Android 15), using the same code:
-- **Plays in the background** through a media service (ExoPlayer). That gives you the media
-  notification, lock-screen, Bluetooth and headset controls, and audio focus, so a call pauses it.
-- Phone layout with the mini player and floating tab bar. The Android back button closes sheets
-  and pages; at Listen Now it sends Tunes to the background without stopping the music.
-- **Security:** HTTPS only (no cleartext, system CAs only), backups off, and the Last.fm and
-  ListenBrainz tokens encrypted with an Android Keystore key. The release build isn't debuggable.
-- **Not on Android:** YouTube account sign-in (Google blocks sign-in inside apps like this), Transfer
-  music and Export data. Search, playback, lyrics, library, playlists and scrobbling all work.
-
-Install: download `Tunes-1.0.0.apk` from Releases, open it on your phone and allow "Install
-unknown apps" when asked.
-
-Build it yourself (needs JDK 21 and the Android SDK):
-```
-npm install
-npm run build:mobile                       # web bundle -> dist-mobile, synced into android/
-cd android && ./gradlew assembleRelease    # set TUNES_KEYSTORE_PROPS to sign
-```
+Tunes for Android is a separate app in this repository (a fork of BitChord). Download the APK from
+[Releases](https://github.com/Hem456anth/Tunes/releases/latest); see the main [README](../README.md).
+Continue on Phone links from this extension open in Tunes for Android 3.1.0 or newer at the same second.
 
 ## Development
 React 18 + TypeScript + Vite 5, Manifest V3. The background, offscreen and content scripts are
@@ -80,7 +64,7 @@ src/sidepanel/           React UI
 
 ## Changes
 ### 1.3.1
-- Continue on Phone (Now Playing ⋯): a QR code and link for the song at this second; Tunes for Android 3.1.0 opens it at that spot. Going the other way, share a song from the phone's player and paste the link into search here.
+- Continue on Phone (Now Playing ⋯): a QR code and link for the song at this second; Tunes for Android (3.1.0 or newer) opens it at that spot. Going the other way, share a song from the phone's player and paste the link into search here.
 - QR codes by qrcode-generator (MIT, Kazuhiko Arase).
 
 ### 1.3.0
