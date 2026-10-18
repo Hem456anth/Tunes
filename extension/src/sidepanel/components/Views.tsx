@@ -10,11 +10,14 @@ import { CardTile, playQueue, playSongWithRadio, TrackRow } from './Items';
 import { DiscoverPage } from './Discover';
 import { Icon } from './Icon';
 import { openCardMenu, openNewPlaylist, useContextMenu } from './Actions';
-import { collKey, getLibCollections, getLibSongs, getPlaylists, localId, playlistCard } from '../../lib/library';
+import { collKey, getLibCollections, getLibSongs, getPlaylists, localId, movePlaylistTrack, playlistCard, sortPlaylist } from '../../lib/library';
 import { IS_MOBILE } from '../../lib/platform';
+import type { PodcastCard } from '../../lib/podcasts/directory';
+import { PodcastResults, PodcastShelf, useSubs } from './Podcasts';
+import { hasFeedAccess, requestFeedAccess } from '../../lib/podcasts/load';
 
 
-export interface Ctx { activeId: string | null; onArtist: (n: string, id?: string) => void; onOpen: (c: Card) => void }
+export interface Ctx { activeId: string | null; onArtist: (n: string, id?: string) => void; onOpen: (c: Card) => void; onShow?: (c: PodcastCard) => void; onPodcasts?: () => void }
 
 const HOUR = 60 * 60 * 1000;
 
@@ -28,7 +31,7 @@ export function SkelCards({ n = 6, round = false }: { n?: number; round?: boolea
 function SkelTiles({ n = 8 }: { n?: number }) {
   return <div className="tiles">{Array.from({ length: n }, (_, i) => <span key={i} className="skel tile-skel" />)}</div>;
 }
-function Err({ msg, retry }: { msg: string; retry?: () => void }) {
+export function Err({ msg, retry }: { msg: string; retry?: () => void }) {
   return (
     <div className="err-box">
       <span>{msg}</span>
@@ -37,7 +40,7 @@ function Err({ msg, retry }: { msg: string; retry?: () => void }) {
   );
 }
 
-function SectionHead({ title, sub, onMore, children }: { title: string; sub?: string; onMore?: () => void; children?: ReactNode }) {
+export function SectionHead({ title, sub, onMore, children }: { title: string; sub?: string; onMore?: () => void; children?: ReactNode }) {
   return (
     <div className="section-head">
       <div>{sub && <div className="strap">{sub}</div>}<h2>{title}</h2></div>
@@ -47,7 +50,7 @@ function SectionHead({ title, sub, onMore, children }: { title: string; sub?: st
 }
 
 // Horizontal scroller with arrow buttons (wide panel) and swipe (narrow).
-function Scroller({ children, className = 'carousel', title, sub, onMore }: { children: ReactNode; className?: string; title?: string; sub?: string; onMore?: () => void }) {
+export function Scroller({ children, className = 'carousel', title, sub, onMore }: { children: ReactNode; className?: string; title?: string; sub?: string; onMore?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [edge, setEdge] = useState({ l: true, r: false });
   const check = () => {
@@ -289,6 +292,7 @@ export function ExplorePage({ ctx, onMood }: { ctx: Ctx; onMood: (c: MoodChip) =
   return (
     <div>
       <DiscoverPage ctx={ctx} />
+      {ctx.onShow && ctx.onPodcasts && <PodcastShelf onShow={ctx.onShow} onAll={ctx.onPodcasts} />}
       <h2 className="group-title explore-moods">Moods & genres</h2>
       {moods.loading ? <SkelTiles n={10} /> : moods.error ? <Err msg={moods.error} retry={moods.retry} /> : moods.data!.map((g) => (
         <section key={g.title} className="section">
@@ -308,6 +312,7 @@ const LIB_ROWS: { id: string; label: string; icon: string }[] = [
   { id: 'songs', label: 'Songs', icon: 'lyrics' },
   { id: 'favorites', label: 'Liked songs', icon: 'heart' },
   { id: 'recent', label: 'Recently played', icon: 'history' },
+  { id: 'podcasts', label: 'Podcasts', icon: 'mic' },
   { id: 'transfer', label: 'Transfer music', icon: 'swap' },
 ];
 function useStored<T>(get: () => Promise<T[]>, key: string) {
@@ -334,7 +339,7 @@ function PlayShuffle({ tracks, more }: { tracks: Track[]; more?: () => void }) {
 function Back({ onClick }: { onClick: () => void }) {
   return <button className="back-btn inline" onClick={onClick}><Icon name="back" size={20} /> Library</button>;
 }
-function Empty({ icon, title, sub, children }: { icon: string; title: string; sub: string; children?: ReactNode }) {
+export function Empty({ icon, title, sub, children }: { icon: string; title: string; sub: string; children?: ReactNode }) {
   return <div className="empty-state am"><Icon name={icon} size={44} /><h3>{title}</h3><p>{sub}</p>{children}</div>;
 }
 
@@ -344,6 +349,7 @@ export function LibraryPage({ ctx, signedIn, session, onSignIn, onTransfer }: { 
   const songs = useStored(getLibSongs, 'libSongs');
   const colls = useStored(getLibCollections, 'libCollections');
   const mine = useStored(getPlaylists, 'localPlaylists');
+  const subs = useSubs();
   const lists = useCached(signedIn ? `library:playlists:${session}` : null, getLibraryPlaylists, HOUR);
   const [view, setView] = useState<string>('home');
   const [imported, setImported] = useState<ImportedPlaylist[] | null>(null);
@@ -439,9 +445,9 @@ export function LibraryPage({ ctx, signedIn, session, onSignIn, onTransfer }: { 
       {!signedIn && !IS_MOBILE && <SignInBanner onSignIn={onSignIn} />}
       <div className="group">
         {LIB_ROWS.filter((r) => !(IS_MOBILE && r.id === 'transfer')).map((r) => (
-          <button key={r.id} className="row" data-row={r.id} onClick={() => (r.id === 'transfer' ? onTransfer() : setView(r.id))}>
+          <button key={r.id} className="row" data-row={r.id} onClick={() => (r.id === 'transfer' ? onTransfer() : r.id === 'podcasts' ? ctx.onPodcasts?.() : setView(r.id))}>
             <span className={`row-icon ${r.id === 'favorites' ? 'liked' : ''}`}><Icon name={r.icon} size={18} /></span>
-            <span className="row-text"><span className="row-title">{r.label}</span><span className="row-sub">{r.id === 'transfer' ? 'From Spotify or Apple Music' : `${count[r.id] ?? 0} ${r.id === 'albums' ? (count[r.id] === 1 ? 'album' : 'albums') : r.id === 'playlists' ? (count[r.id] === 1 ? 'playlist' : 'playlists') : count[r.id] === 1 ? 'song' : 'songs'}`}</span></span>
+            <span className="row-text"><span className="row-title">{r.label}</span><span className="row-sub">{r.id === 'transfer' ? 'From Spotify or Apple Music' : r.id === 'podcasts' ? (subs?.length ? `${subs.length} show${subs.length === 1 ? '' : 's'}` : 'Discover shows') : `${count[r.id] ?? 0} ${r.id === 'albums' ? (count[r.id] === 1 ? 'album' : 'albums') : r.id === 'playlists' ? (count[r.id] === 1 ? 'playlist' : 'playlists') : count[r.id] === 1 ? 'song' : 'songs'}`}</span></span>
             <Icon name="chev-right" size={20} />
           </button>
         ))}
@@ -493,6 +499,7 @@ export function SearchPage({ ctx, query, onSearch, onMood }: { ctx: Ctx; query: 
 export function SearchView({ q, ctx }: { q: string; ctx: Ctx }) {
   const [chip, setChip] = useState<SearchChip | null>(null);
   const [chips, setChips] = useState<SearchChip[]>([]);
+  const [pods, setPods] = useState(false);
   const { data, error, loading, retry } = useCached(`search:${q}:${chip?.params ?? ''}`, () => search(q, chip?.params), 30 * 60 * 1000);
   useEffect(() => { if (!chip && data?.chips.length) setChips(data.chips); }, [data, chip]);
 
@@ -504,13 +511,14 @@ export function SearchView({ q, ctx }: { q: string; ctx: Ctx }) {
     <div>
       {chips.length > 0 && (
         <div className="schips" role="tablist">
-          <button className={`schip ${!chip ? 'on' : ''}`} onClick={() => setChip(null)}>All</button>
+          <button className={`schip ${!chip && !pods ? 'on' : ''}`} onClick={() => { setPods(false); setChip(null); }}>All</button>
           {chips.map((c) => (
-            <button key={c.title} className={`schip ${chip?.title === c.title ? 'on' : ''}`} onClick={() => setChip(c)}>{c.title}</button>
+            <button key={c.title} className={`schip ${chip?.title === c.title ? 'on' : ''}`} onClick={() => { setPods(false); setChip(c); }}>{c.title}</button>
           ))}
+          {ctx.onShow && <button className={`schip ${pods ? 'on' : ''}`} onClick={() => { setChip(null); setPods(true); }}>Podcasts</button>}
         </div>
       )}
-      {loading ? <><SkelRows n={3} /><SkelCards /></> : error ? <Err msg={error} retry={retry} /> : !data!.shelves.length ? (
+      {pods && ctx.onShow ? <PodcastSearch q={q} onShow={ctx.onShow} /> : loading ? <><SkelRows n={3} /><SkelCards /></> : error ? <Err msg={error} retry={retry} /> : !data!.shelves.length ? (
         <div className="empty-state"><Icon name="search" size={28} /><p>No results for “{q}”. Try fewer words, or check the spelling.</p></div>
       ) : chip ? (
         rest.map((s, i) => (
@@ -539,6 +547,15 @@ export function SearchView({ q, ctx }: { q: string; ctx: Ctx }) {
       )}
     </div>
   );
+}
+
+/** The search's Podcasts chip: needs feed access first, like the Podcasts page. */
+function PodcastSearch({ q, onShow }: { q: string; onShow: (c: PodcastCard) => void }) {
+  const [ok, setOk] = useState<boolean | null>(null);
+  useEffect(() => { hasFeedAccess().then(setOk); }, []);
+  if (ok === null) return <SkelCards />;
+  if (!ok) return <div className="err-box pod-invite"><span>Turn on podcasts to search shows.</span><button className="pill sm" onClick={async () => setOk(await requestFeedAccess())}>Turn on</button></div>;
+  return <PodcastResults q={q} onShow={onShow} />;
 }
 
 function TopResult({ shelf, ctx }: { shelf: Shelf; ctx: Ctx }) {
@@ -571,6 +588,38 @@ function TopResult({ shelf, ctx }: { shelf: Shelf; ctx: Ctx }) {
   );
 }
 
+/** Reorder your playlist: drag a row, use the arrows, or sort it once. */
+function ReorderList({ id, tracks }: { id: string; tracks: Track[] }) {
+  const [drag, setDrag] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  const move = (from: number, to: number) => { if (to >= 0 && to < tracks.length && from !== to) void movePlaylistTrack(id, from, to); };
+  return (
+    <div className="reorder">
+      <div className="schips" role="group" aria-label="Sort playlist">
+        <span className="row-sub">Sort once:</span>
+        <button className="schip" onClick={() => sortPlaylist(id, 'title')}>Title</button>
+        <button className="schip" onClick={() => sortPlaylist(id, 'artist')}>Artist</button>
+        <button className="schip" onClick={() => sortPlaylist(id, 'reverse')}>Reverse</button>
+      </div>
+      <ol className="ro-list">
+        {tracks.map((t, i) => (
+          <li key={t.videoId} className={`ro-row ${drag === i ? 'dragging' : ''} ${over === i && drag !== null && drag !== i ? 'over' : ''}`} draggable
+            onDragStart={(e) => { setDrag(i); e.dataTransfer.effectAllowed = 'move'; }}
+            onDragOver={(e) => { e.preventDefault(); setOver(i); }}
+            onDragEnd={() => { setDrag(null); setOver(null); }}
+            onDrop={(e) => { e.preventDefault(); if (drag !== null) move(drag, i); setDrag(null); setOver(null); }}>
+            <span className="ro-grip" aria-hidden><Icon name="lyrics" size={18} /></span>
+            <img src={sized(t.thumbnail, 120)} alt="" />
+            <span className="ro-text"><span className="track-title">{t.title}</span><span className="track-sub">{t.artists}</span></span>
+            <button className="icon-btn" aria-label={`Move ${t.title} up`} disabled={i === 0} onClick={() => move(i, i - 1)}><Icon name="chevron" size={18} /></button>
+            <button className="icon-btn flip" aria-label={`Move ${t.title} down`} disabled={i === tracks.length - 1} onClick={() => move(i, i + 1)}><Icon name="chevron" size={18} /></button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 // ---------- Album / playlist ----------
 export function CollectionView({ card, ctx, onBack }: { card: Card; ctx: Ctx; onBack: () => void }) {
   const lid = localId(card);
@@ -580,6 +629,7 @@ export function CollectionView({ card, ctx, onBack }: { card: Card; ctx: Ctx; on
 function LocalPlaylistView({ id, ctx, onBack }: { id: string; ctx: Ctx; onBack: () => void }) {
   const lists = useStored(getPlaylists, 'localPlaylists');
   const p = lists?.find((x) => x.id === id);
+  const [editing, setEditing] = useState(false);
   useEffect(() => { if (lists && !p) onBack(); }, [lists, p, onBack]);
   if (!p) return <SkelRows n={6} />;
   const card = playlistCard(p);
@@ -593,9 +643,10 @@ function LocalPlaylistView({ id, ctx, onBack }: { id: string; ctx: Ctx; onBack: 
           <h1 className="coll-title">{p.title}</h1>
           <div className="coll-meta">{card.subtitle}</div>
           <PlayShuffle tracks={p.tracks} more={() => openCardMenu(card)} />
+          {p.tracks.length > 1 && <button className={`pill sm ${editing ? 'white' : 'ghost'} reorder-btn`} aria-pressed={editing} onClick={() => setEditing(!editing)}><Icon name="queue" size={16} /> {editing ? 'Done' : 'Reorder'}</button>}
         </div>
       </div>
-      {p.tracks.length
+      {editing ? <ReorderList id={p.id} tracks={p.tracks} /> : p.tracks.length
         ? <div className="track-grid">{p.tracks.map((t, i) => <TrackRow key={t.videoId} t={t} list={p.tracks} i={i} activeId={ctx.activeId} onArtist={ctx.onArtist} playlistId={p.id} />)}</div>
         : <Empty icon="playlist-add" title="This Playlist Is Empty" sub="Tap ⋯ on any song, then Add to a Playlist…" />}
     </div>

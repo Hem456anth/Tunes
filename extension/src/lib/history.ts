@@ -1,4 +1,5 @@
 import type { Track } from './types';
+import { addSongsToLibrary } from './library';
 
 const KEY = 'recentlyPlayed';
 const MAX = 50;
@@ -34,6 +35,8 @@ export function toggleLiked(t: Track): Promise<boolean> {
     const has = list.some((x) => x.videoId === t.videoId);
     const next = has ? list.filter((x) => x.videoId !== t.videoId) : [t, ...list];
     await chrome.storage.local.set({ [LIKED]: next });
+    // One Library: a song you like is in your Library too (unliking keeps it there).
+    if (!has) await addSongsToLibrary([t]).catch(() => 0);
     return !has;
   });
 }

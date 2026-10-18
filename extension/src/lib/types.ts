@@ -14,6 +14,8 @@ export interface Track {
   language?: string;
   releaseDate?: string;
   sources?: string[];
+  /** Podcast episode (videoId is then "pod:<feed>#<id>"): plays its own enclosure URL */
+  podcast?: { url: string; type: string; feedUrl: string; published?: number };
 }
 
 export type CardKind = 'album' | 'playlist' | 'artist' | 'video' | 'song';
@@ -70,6 +72,8 @@ export interface PlayerState {
   errorDetail?: string | null;
   /** Quality badge of the playing stream, e.g. "320 kbps · AAC" */
   quality?: string | null;
+  /** Playback speed (podcasts only; songs always play at 1×) */
+  rate?: number;
 }
 
 export type SourceOrder = 'saavn-first' | 'youtube-first' | 'youtube-only' | 'tab-only';
@@ -114,6 +118,14 @@ export interface Settings {
   reduceBlur: boolean;
   syncedLyrics: boolean;
   blurLyrics: boolean;
+  /** Second line under each lyric: translation or romanization */
+  lyricsMode: 'off' | 'translate' | 'romanize';
+  /** Language lyrics are translated into (BCP 47) */
+  lyricsLang: string;
+  /** Shown the first-run welcome */
+  onboarded: boolean;
+  /** Play songs back to back with no gap (no crossfade) */
+  gapless: boolean;
   // Advanced
   showStats: boolean;
   lyricsDebug: boolean;
@@ -128,6 +140,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastfmKey: '', lastfmSecret: '', lastfmSession: '', lastfmUser: '',
   discoverLangs: ['telugu', 'hindi', 'tamil', 'english'],
   theme: 'dark', reduceMotion: false, reduceBlur: false, syncedLyrics: true, blurLyrics: true,
+  lyricsMode: 'off', lyricsLang: 'en', onboarded: false, gapless: true,
   showStats: false, lyricsDebug: false,
 };
 
@@ -156,6 +169,8 @@ export type UiCommand =
   | { type: 'repeat' }
   | { type: 'sleep'; minutes: number } // 0 = off, -1 = end of this song
   | { type: 'retry' }
+  | { type: 'rate'; value: number }
+  | { type: 'skip'; seconds: number }
   | { type: 'open-tab' };
 
 export type PageCommand =

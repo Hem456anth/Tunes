@@ -13,9 +13,13 @@ import { resolveYouTube, type ResolvedStream } from '../lib/sources/youtube';
 import { bestRendition, decryptMediaUrl, resolveSaavn } from '../lib/sources/jiosaavn';
 import { getQueue, getTrackDetails, searchSongs } from '../lib/innertube';
 import { best, score, toSeconds } from '../lib/matcher';
-import { installStaticRules, setMediaUserAgent, setPlayerUserAgent, syncYouTubeCookies } from './rules';
+import { currentMediaUserAgent, installStaticRules, setMediaUserAgent, setPlayerUserAgent, syncYouTubeCookies } from './rules';
 import { fetchWithTimeout, withTimeout } from '../lib/net';
 import { friendlyPlayError } from '../lib/errors';
+import { getBlocked, isBlocked, type Blocked } from '../lib/blocklist';
+import { blend, refineRadio } from '../lib/suggest';
+import { getLiked, getRecent } from '../lib/history';
+import { addSongsToLibrary } from '../lib/library';
 
 const START_TIMEOUT_MS = 7000;
 const PREFETCH_TTL_MS = 25 * 60 * 1000;
@@ -261,12 +265,14 @@ function saavnDirect(t: Track, q: 'high' | 'normal' | 'low'): ResolvedStream | n
 
 // ---------- source chain ----------
 const describe = (s: ResolvedStream) => {
+  if (s.source === 'podcast') { try { return `Podcast · ${new URL(s.url).host}`; } catch { return 'Podcast'; } }
   const codec = /opus/.test(s.mimeType) ? 'Opus' : /mp4a|mp4/.test(s.mimeType) ? 'AAC' : s.mimeType.split(';')[0];
   return `${s.source === 'jiosaavn' ? 'JioSaavn' : `YouTube (${s.client})`} · ${s.kbps} kbps ${codec}`;
 };
 
 /** Short quality badge for Now Playing: "320 kbps · AAC". */
 const badge = (s: ResolvedStream) => {
+  if (s.source === 'podcast') return null; // the podcast bar says enough
   const codec = /opus/.test(s.mimeType) ? 'Opus' : /mp4a|mp4/.test(s.mimeType) ? 'AAC' : '';
   return s.kbps ? `${s.kbps} kbps${codec ? ` · ${codec}` : ''}` : codec || null;
 };
@@ -286,6 +292,12 @@ async function enrich(t: Track) {
 }
 
 async function resolveNext(t: Track, order: string[], triedSources: Set<string>, failReasons: string[]): Promise<ResolvedStream | null> {
+  // A podcast episode is its own stream: nothing to look up, nothing to fall back to.
+  if (t.podcast) {
+    if (triedSources.has('podcast')) return null;
+    triedSources.add('podcast');
+    return { url: t.podcast.url, mimeType: t.podcast.type || 'audio/mpeg', kbps: 0, source: 'podcast', durationSec: toSeconds(t.duration) };
+  }
   for (const src of order) {
     if (triedSources.has(src)) continue;
     triedSources.add(src);
@@ -390,6 +402,15 @@ async function startDirect(t: Track, token: number, startAt = 0): Promise<void> 
       setTimeout(() => { if (token === loadToken) advance(1, true); }, 1500);
     return;
   }
+  if (!r && t.podcast) {
+    await audio({ cmd: 'stop' });
+    state.engine = null; state.playing = false; state.resolving = false;
+    state.error = navigator.onLine === false ? 'You’re offline. Connect to the internet and try again.' : 'This episode didn’t play. The podcast’s server may be down; try again later.';
+    state.errorDetail = failReasons.join('; ') || 'episode stream failed';
+    state.canRetry = true;
+    persist(); broadcast();
+    return;
+  }
   if (!r) {
     // Every direct stream failed: play it in the YouTube player inside Tunes.
     const ok = await playEmbed(t, token, startAt);
@@ -413,8 +434,9 @@ async function startDirect(t: Track, token: number, startAt = 0): Promise<void> 
   state.quality = badge(r);
   state.resolving = false;
   state.duration = r.durationSec ?? state.duration;
-  await audio({ cmd: 'load', url: r.url, token, volume: state.volume, startAt, fade, meta: { title: t.title, artist: t.artists, album: t.album, artwork: t.thumbnail } });
-  armStartTimer(t, token);
+  state.rate = t.podcast ? podcastRate : 1;
+  await audio({ cmd: 'load', url: r.url, token, volume: state.volume, startAt, fade: t.podcast ? 0 : fade, rate: state.rate, podcast: !!t.podcast, meta: { title: t.title, artist: t.artists, album: t.album, artwork: t.thumbnail } });
+  armStartTimer(t, token, t.podcast ? 30000 : START_TIMEOUT_MS);
   persist(); broadcast();
 }
 
@@ -445,13 +467,22 @@ async function playCurrent(fade = 0) {
   failReasons = [];
   embedTried = new Set();
   Object.assign(state, { track: t, videoId: t.videoId, position: 0, duration: 0, needsActivation: false, resolving: true, error: null, errorDetail: null, canRetry: false, stream: null, quality: null });
-  pushRecent(t);
+  if (!t.podcast) pushRecent(t); // episodes keep their own progress instead
   persist(); broadcast();
   // Silence the previous song right away instead of letting it run on while
   // the next one resolves (heard as the music "fluctuating" between songs).
-  if (state.engine === 'direct' && !fade) audio({ cmd: 'stop' });
+  const seamless = gaplessNext === t.videoId;
+  gaplessNext = '';
+  if (state.engine === 'direct' && !fade && !seamless) audio({ cmd: 'stop' });
   resumeTried = '';
-  await startDirect(t, token);
+  // Episodes pick up where you left them.
+  let at = 0;
+  if (t.podcast) {
+    const p = ((await chrome.storage.local.get('podcastProgress')).podcastProgress as Record<string, { pos: number; dur: number; played: boolean }> | undefined)?.[t.videoId];
+    if (p && !p.played && p.pos > 5 && (!p.dur || p.pos < p.dur - 15)) at = Math.max(0, p.pos - 3);
+    if (token !== loadToken) return;
+  }
+  await startDirect(t, token, at);
 }
 
 async function advance(dir: 1 | -1, auto = false, fade = 0) {
@@ -468,21 +499,43 @@ async function advance(dir: 1 | -1, auto = false, fade = 0) {
   let i = state.index + dir;
   if (i >= state.queue.length) {
     // Tunes-style autoplay: when the queue runs out, keep going with radio.
-    if (auto && state.repeat === 'off' && (await getSettings()).autoRadio && state.track) {
+    if (auto && state.repeat === 'off' && (await getSettings()).autoRadio && state.track && !state.track.podcast) {
       try {
-        const have = new Set(state.queue.map((x) => x.videoId));
-        const seed = ytOf(state.track) ?? (await matchYouTube(state.track));
-        // Songs you asked to hear less of stay out of autoplay.
-        const less = new Set(((await chrome.storage.local.get('suggestLess')).suggestLess as string[]) ?? []);
-        const more = seed ? (await getQueue({ videoId: seed })).filter((x) => !have.has(x.videoId) && !less.has(x.videoId)) : [];
-        if (more.length) { state.queue.push(...more.slice(0, 25)); touchQueue(); state.index++; return playCurrent(); }
+        const more = await autoplayPicks(state.track);
+        if (more.length) { state.queue.push(...more); touchQueue(); state.index++; return playCurrent(); }
       } catch { /* fall through */ }
     }
     if (state.repeat === 'all' || !auto) i = 0; else { state.playing = false; broadcast(); return; }
   }
   if (i < 0) i = state.repeat === 'all' ? state.queue.length - 1 : 0;
+  // Songs and artists you blocked are skipped when they come up on their own.
+  if (auto && blocked.songs.length + blocked.artists.length) {
+    let guard = state.queue.length;
+    while (guard-- > 0 && state.queue[i] && isBlocked(state.queue[i], blocked)) {
+      log('skip blocked', state.queue[i].title);
+      i += 1;
+      if (i >= state.queue.length) { if (state.repeat === 'all') i = 0; else { state.playing = false; broadcast(); return; } }
+    }
+  }
   state.index = i;
   await playCurrent(fade);
+}
+
+// ---------- blocked songs/artists, smarter autoplay ----------
+let blocked: Blocked = { songs: [], artists: [] };
+void getBlocked().then((b) => { blocked = b; });
+chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.blocked) void getBlocked().then((b) => { blocked = b; }); });
+/** Radio from the current song, blended with radio from the song before it; cleaned by refineRadio. */
+async function autoplayPicks(cur: Track): Promise<Track[]> {
+  const seed = ytOf(cur) ?? (await matchYouTube(cur));
+  if (!seed) return [];
+  const prev = [...state.queue.slice(0, state.index)].reverse().find((t) => !t.podcast && ytOf(t) && ytOf(t) !== seed);
+  const [a, b] = await Promise.all([getQueue({ videoId: seed }), prev ? getQueue({ videoId: ytOf(prev)! }).catch(() => [] as Track[]) : Promise.resolve([] as Track[])]);
+  const less = new Set(((await chrome.storage.local.get('suggestLess')).suggestLess as string[]) ?? []);
+  const ctx = { queued: new Set(state.queue.map((x) => x.videoId)), recent: await getRecent().catch(() => []), less, blocked };
+  const picks = refineRadio(blend(a, b), ctx);
+  // A small niche can run out of unheard songs: then allow recent ones (never blocked ones).
+  return picks.length >= 5 ? picks : refineRadio(blend(a, b), { ...ctx, recent: ctx.recent.slice(0, 3) });
 }
 
 /** Move one queue item; the playing song keeps playing, wherever it ends up. */
@@ -542,7 +595,7 @@ function lastfm(kind: 'now' | 'scrobble') {
 }
 function maybeScrobble() {
   const id = state.track?.videoId;
-  if (!id || !state.playing) return;
+  if (!id || !state.playing || state.track?.podcast) return; // episodes aren't music listens
   if (nowPlayingSent !== id) { nowPlayingSent = id; listenbrainz('playing_now'); lastfm('now'); }
   // Last.fm rules: tracks over 30 s, after half the song or 4 minutes.
   const need = Math.min(240, (state.duration || 60) / 2);
@@ -571,17 +624,51 @@ function checkSleep() {
 
 // ---------- crossfade + prefetch, driven by the audio clock ----------
 let xfadeToken = -1;
+let preloadFor = -1;
+let gaplessNext = ''; // the next song is loaded in the player: don't stop the player before it
 function onTick() {
   checkSleep();
   if (state.engine !== 'direct' || !state.playing) return;
   if (state.position > 8) prefetchNext();
   const x = cfg.crossfade;
   const left = state.duration - state.position;
+  // Gapless (no crossfade): hand the next song's stream to the player a few seconds early.
+  if (x === 0 && cfg.gapless && !onEmbed && preloadFor !== loadToken && state.repeat !== 'one' && !state.sleepEndOfTrack && !state.sleepAt
+    && state.index + 1 < state.queue.length && left > 0 && left <= 12) {
+    const next = state.queue[state.index + 1];
+    const hit = resolved.get(next.videoId);
+    if (hit && !next.podcast && Date.now() - hit.at < PREFETCH_TTL_MS && !(blocked.songs.length + blocked.artists.length && isBlocked(next, blocked))
+      && (!hit.r.userAgent || hit.r.userAgent === currentMediaUserAgent())) {
+      preloadFor = loadToken; gaplessNext = next.videoId;
+      log('gapless preload', next.title);
+      audio({ cmd: 'preload', url: hit.r.url, rate: 1, podcast: false });
+    }
+  }
   if (x > 0 && !onEmbed && Date.now() > sleepFadeUntil && state.duration > 30 && xfadeToken !== loadToken && state.repeat !== 'one' && !state.sleepEndOfTrack
     && state.index + 1 < state.queue.length && left > 0 && left <= x + 0.3) {
     xfadeToken = loadToken;
     advance(1, true, Math.min(x, left));
   }
+}
+
+// ---------- podcasts: speed and per-episode progress ----------
+let podcastRate = 1;
+void chrome.storage.local.get('podcastRate').then((r) => { const v = Number(r.podcastRate); if (v >= 0.5 && v <= 3) podcastRate = v; });
+let progSavedAt = 0;
+function podcastProgress(kind: string) {
+  const t = state.track!;
+  const dur = state.duration || toSeconds(t.duration) || 0;
+  const played = kind === 'ended' || (dur > 60 && state.position >= dur * 0.95);
+  if (!played && kind === 'time' && Date.now() - progSavedAt < 10000) return;
+  progSavedAt = Date.now();
+  const id = t.videoId;
+  void chrome.storage.local.get('podcastProgress').then((r) => {
+    const all = (r.podcastProgress as Record<string, unknown>) ?? {};
+    all[id] = { pos: played ? 0 : state.position, dur, played, at: Date.now() };
+    const keys = Object.keys(all);
+    if (keys.length > 2000) for (const k of keys.sort((a, b) => (all[a] as { at: number }).at - (all[b] as { at: number }).at).slice(0, keys.length - 2000)) delete all[k];
+    return chrome.storage.local.set({ podcastProgress: all });
+  }).catch(() => {});
 }
 
 // ---------- events from offscreen audio ----------
@@ -602,6 +689,7 @@ function onAudioEvent(m: any) {
   state.playing = m.playing;
   if (m.kind === 'playing') { startedToken = m.token; adFreeSkips = 0; if (startTimer) { clearTimeout(startTimer); startTimer = null; } }
   maybeScrobble();
+  if (state.track?.podcast) podcastProgress(m.kind);
   onTick();
   if (m.kind === 'ended') {
     if (Date.now() < sleepFadeUntil) { state.playing = false; broadcast(); return; } // the sleep timer stopped here
@@ -653,6 +741,8 @@ function validCommand(cmd: UiCommand): boolean {
     case 'seek': return Number.isFinite(cmd.seconds) && cmd.seconds >= 0;
     case 'volume': return Number.isFinite(cmd.value) && cmd.value >= 0 && cmd.value <= 100;
     case 'sleep': return Number.isFinite(cmd.minutes) && cmd.minutes >= -1 && cmd.minutes <= 24 * 60;
+    case 'rate': return [0.5, 0.75, 0.8, 0.9, 1, 1.1, 1.2, 1.25, 1.5, 1.75, 2, 2.5, 3].includes(cmd.value);
+    case 'skip': return Number.isFinite(cmd.seconds) && Math.abs(cmd.seconds) <= 600;
     default: return true;
   }
 }
@@ -729,6 +819,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'clear-upnext': state.queue = state.queue.slice(0, state.index + 1); break;
       case 'toggle': await togglePlay(); break;
       case 'retry': await resumeTrack(); break;
+      case 'rate':
+        if (!state.track?.podcast) break;
+        podcastRate = cmd.value; state.rate = cmd.value;
+        chrome.storage.local.set({ podcastRate: cmd.value });
+        await audio({ cmd: 'rate', value: cmd.value });
+        break;
+      case 'skip': {
+        const to = Math.max(0, Math.min((state.duration || Infinity) - 1, state.position + cmd.seconds));
+        state.position = to; await live.seek(to);
+        break;
+      }
       case 'next': await advance(1); break;
       case 'prev': await previous(); break;
       case 'seek': await live.seek(cmd.seconds); state.position = cmd.seconds; break;
@@ -766,8 +867,18 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
   if (cookieTimer) clearTimeout(cookieTimer);
   cookieTimer = setTimeout(syncYouTubeCookies, 1000);
 });
-chrome.runtime.onInstalled.addListener(setup);
+chrome.runtime.onInstalled.addListener((d) => {
+  void setup();
+  if (d.reason === 'update') void migrate();
+});
+/** 1.3.0: people updating skip the first-run welcome, and liked songs join the Library. */
+async function migrate() {
+  const { settings } = await chrome.storage.local.get('settings');
+  if (settings && (settings as Settings).onboarded === undefined) await chrome.storage.local.set({ settings: { ...(settings as Settings), onboarded: true } });
+  const liked = await getLiked().catch(() => [] as Track[]);
+  if (liked.length) await addSongsToLibrary(liked).catch(() => 0);
+}
 chrome.runtime.onStartup.addListener(setup);
 
 // DevTools/test hook: inspect and nudge the live player state from the service worker console.
-(self as unknown as { __tunesDebug: unknown }).__tunesDebug = { state, broadcast: () => broadcast() };
+(self as unknown as { __tunesDebug: unknown }).__tunesDebug = { state, broadcast: () => broadcast(), audio: (m: Record<string, unknown>) => audio(m as never) };

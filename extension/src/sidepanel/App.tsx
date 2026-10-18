@@ -8,6 +8,9 @@ import { MiniBar, NowPlaying } from './components/NowPlaying';
 import { SettingsPage } from './components/Settings';
 import { Arcs } from './components/Logo';
 import { ActionHost } from './components/Actions';
+import { PodcastsPage, ShowView } from './components/Podcasts';
+import { Onboarding } from './components/Onboarding';
+import type { PodcastCard } from '../lib/podcasts/directory';
 import { IS_MOBILE } from '../lib/platform';
 
 export type Tab = 'listen' | 'explore' | 'library' | 'search';
@@ -20,7 +23,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 
 const isTab = new URLSearchParams(location.search).get('mode') === 'tab';
 
-type Overlay = { kind: 'coll'; card: Card } | { kind: 'mood'; chip: MoodChip } | { kind: 'artist'; name: string; id?: string } | null;
+type Overlay = { kind: 'coll'; card: Card } | { kind: 'mood'; chip: MoodChip } | { kind: 'artist'; name: string; id?: string } | { kind: 'podcasts' } | { kind: 'show'; card: PodcastCard } | null;
 
 export default function App() {
   const player = usePlayer();
@@ -54,8 +57,10 @@ export default function App() {
   const onArtist = useCallback((name: string, id?: string) => { if (name || id) push({ kind: 'artist', name, id }); }, [push]);
   const onMood = useCallback((chip: MoodChip) => push({ kind: 'mood', chip }), [push]);
   const onOpen = useCallback((card: Card) => push({ kind: 'coll', card }), [push]);
+  const onShow = useCallback((card: PodcastCard) => push({ kind: 'show', card }), [push]);
+  const onPodcasts = useCallback(() => push({ kind: 'podcasts' }), [push]);
   const activeId = player?.videoId ?? null;
-  const ctx = useMemo(() => ({ activeId, onArtist, onOpen }), [activeId, onArtist, onOpen]);
+  const ctx = useMemo(() => ({ activeId, onArtist, onOpen, onShow, onPodcasts }), [activeId, onArtist, onOpen, onShow, onPodcasts]);
 
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
@@ -108,6 +113,10 @@ export default function App() {
               <CollectionView key={overlay.card.browseId ?? overlay.card.title} card={overlay.card} ctx={ctx} onBack={back} />
             ) : overlay?.kind === 'mood' ? (
               <MoodView chip={overlay.chip} ctx={ctx} onBack={back} />
+            ) : overlay?.kind === 'podcasts' ? (
+              <PodcastsPage onBack={back} onShow={onShow} />
+            ) : overlay?.kind === 'show' ? (
+              <ShowView key={overlay.card.feedUrl} card={overlay.card} onBack={back} />
             ) : overlay?.kind === 'artist' ? (
               <ArtistView key={overlay.id ?? overlay.name} name={overlay.name} id={overlay.id} ctx={ctx} onBack={back} />
             ) : (
@@ -141,6 +150,7 @@ export default function App() {
       </div>
 
       <ActionHost player={player} signedIn={signedIn} onArtist={(n, id) => { setExpanded(false); onArtist(n, id); }} onOpen={(c) => { setExpanded(false); onOpen(c); }} />
+      <Onboarding onSignIn={() => setSettingsOpen(true)} onTransfer={() => setSettingsOpen('transfer')} />
       {settingsOpen && <SettingsPage me={me} initial={settingsOpen === 'transfer' ? 'transfer' : undefined} onClose={() => { setSettingsOpen(false); account.retry(); }} />}
     </div>
   );

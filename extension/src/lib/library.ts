@@ -93,6 +93,29 @@ export function removeFromPlaylist(id: string, videoId: string): Promise<void> {
     await write(LISTS, lists);
   });
 }
+/** Move one song inside your playlist. */
+export function movePlaylistTrack(id: string, from: number, to: number): Promise<void> {
+  return locked(async () => {
+    const lists = await getPlaylists();
+    const p = lists.find((x) => x.id === id);
+    if (!p || from === to || from < 0 || to < 0 || from >= p.tracks.length || to >= p.tracks.length) return;
+    const [t] = p.tracks.splice(from, 1);
+    p.tracks.splice(to, 0, t); p.updated = Date.now();
+    await write(LISTS, lists);
+  });
+}
+/** Sort your playlist once (title, artist, or most recently added first is the stored order reversed). */
+export function sortPlaylist(id: string, by: 'title' | 'artist' | 'reverse'): Promise<void> {
+  return locked(async () => {
+    const lists = await getPlaylists();
+    const p = lists.find((x) => x.id === id);
+    if (!p) return;
+    const c = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+    p.tracks = by === 'reverse' ? [...p.tracks].reverse() : [...p.tracks].sort((a, b) => c.compare(by === 'title' ? a.title : a.artists, by === 'title' ? b.title : b.artists));
+    p.updated = Date.now();
+    await write(LISTS, lists);
+  });
+}
 export function renamePlaylist(id: string, title: string): Promise<void> {
   return locked(async () => {
     const lists = await getPlaylists();

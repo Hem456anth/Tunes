@@ -1,3 +1,4 @@
+import { blockArtist, blockSong, getBlocked, isBlocked, leadArtist } from '../../lib/blocklist';
 // Apple Music-style action sheets, trimmed to the essentials: the song menu
 // (Now Playing ⋯, song rows), album/playlist menus, Add to a Playlist, plus the
 // confirmation HUD. One host renders whatever is open.
@@ -174,11 +175,19 @@ export function ActionHost({ player, signedIn, onArtist, onOpen }: { player: Pla
 
 // ---------- song menu (Image 2) ----------
 function SongSheet({ t, opts, player, onClose, open, onArtist }: { t: Track; opts: SongMenuOpts; player: React.MutableRefObject<PlayerState | null>; onClose: () => void; open: (s: Sheet) => void; onArtist: (n: string, id?: string) => void }) {
-  const [f, setF] = useState<{ lib: boolean; fav: boolean; less: boolean } | null>(null);
+  const [f, setF] = useState<{ lib: boolean; fav: boolean; less: boolean; blocked: boolean; artistBlocked: boolean } | null>(null);
+  const lead = leadArtist(t);
   useEffect(() => {
-    Promise.all([inLibrary(t.videoId), getLiked(), getSuggestLess()]).then(([lib, liked, less]) =>
-      setF({ lib, fav: liked.some((x) => x.videoId === t.videoId), less: less.includes(t.videoId) }));
-  }, [t.videoId]);
+    Promise.all([inLibrary(t.videoId), getLiked(), getSuggestLess(), getBlocked()]).then(([lib, liked, less, b]) =>
+      setF({ lib, fav: liked.some((x) => x.videoId === t.videoId), less: less.includes(t.videoId), blocked: b.songs.some((x) => x.videoId === t.videoId), artistBlocked: b.artists.some((a) => a.name.toLowerCase() === lead.toLowerCase()) }));
+  }, [t.videoId, lead]);
+  /** Leaving: skip it if it's playing, drop it from what's up next. */
+  const dropFromQueue = async (match: (x: Track) => boolean) => {
+    const st = player.current;
+    if (!st) return;
+    for (let i = st.queue.length - 1; i > st.index; i--) if (match(st.queue[i])) await send({ type: 'remove-index', index: i });
+    if (st.track && match(st.track) && st.queue.length > 1) await send({ type: 'next' });
+  };
   const s = player.current;
   const isCurrent = s?.track?.videoId === t.videoId;
   const np = !!opts.nowPlaying;
@@ -213,12 +222,24 @@ function SongSheet({ t, opts, player, onClose, open, onArtist }: { t: Track; opt
           else if (st) { const i = st.queue.findIndex((x, k) => k > st.index && x.videoId === t.videoId); if (i > 0) await send({ type: 'remove-index', index: i }); }
           hud('We’ll Suggest Less Like This', 'thumb-down');
         } },
+    block: f?.blocked
+      ? { id: 'block', label: 'Allow This Song Again', icon: 'block', run: async () => { await blockSong(t, false); hud('Song Allowed', 'check'); } }
+      : { id: 'block', label: 'Don’t Play This Song', icon: 'block', run: async () => { await blockSong(t, true); await dropFromQueue((x) => x.videoId === t.videoId); hud('Won’t Play This Song', 'block'); } },
+    blockArtist: f?.artistBlocked
+      ? { id: 'block-artist', label: `Unblock ${lead}`, icon: 'block', run: async () => { await blockArtist(lead, t.artistId, false); hud('Artist Unblocked', 'check'); } }
+      : { id: 'block-artist', label: `Block ${lead}`, icon: 'block', danger: true, run: async () => {
+          if (!confirm(`Block ${lead}? Tunes won’t play their songs in radio, autoplay or shuffle. You can undo this in Settings.`)) return;
+          await blockArtist(lead, t.artistId, true);
+          const b = await getBlocked();
+          await dropFromQueue((x) => isBlocked(x, b));
+          hud('Artist Blocked', 'block');
+        } },
     removePl: { id: 'remove-pl', label: 'Remove from Playlist', icon: 'minus-circle', danger: true, run: async () => { await removeFromPlaylist(opts.playlistId!, t.videoId); hud('Removed', 'minus-circle'); } },
   };
   // Only what matters: the star and the moon already sit on Now Playing.
   const order = np
-    ? ['lib', 'playlist', 'shareSong', 'station', 'less']
-    : ['next', 'last', 'lib', 'playlist', 'fav', 'shareSong', ...(opts.playlistId ? ['removePl'] : [])];
+    ? ['lib', 'playlist', 'shareSong', 'station', 'less', 'block', 'blockArtist']
+    : ['next', 'last', 'lib', 'playlist', 'fav', 'shareSong', 'block', ...(opts.playlistId ? ['removePl'] : [])];
   return (
     <SheetFrame label={`${t.title} options`} onClose={onClose} head={<Head img={t.thumbnail} title={t.title} sub={[t.artists, t.album].filter(Boolean).join(' · ')} />}>
       {f ? <Rows rows={order.map((k) => R[k])} close={onClose} /> : <div className="sheet-wait"><span className="spinner" /></div>}

@@ -1,3 +1,4 @@
+import { blockArtist, blockSong, getBlocked, type Blocked } from '../../lib/blocklist';
 import { importBackup } from '../../lib/backup';
 // Settings, laid out like Tunes's Android Settings: big title, grouped
 // rounded cards, uppercase section labels, toggles on the right, sub-pages
@@ -339,7 +340,7 @@ function LyricsSourcesSheet({ onClose }: { onClose: () => void }) {
 
 export function SettingsPage({ me, onClose, initial }: { me: AccountInfo | null; onClose: () => void; initial?: 'transfer' }) {
   const [s, save] = useStoreSettings();
-  const [page, setPage] = useState<'main' | 'accounts' | 'sources' | 'transfer'>(initial ?? 'main');
+  const [page, setPage] = useState<'main' | 'accounts' | 'sources' | 'transfer' | 'blocked'>(initial ?? 'main');
   const [lyricsOpen, setLyricsOpen] = useState(false);
   const [lyricsSummary, setLyricsSummary] = useState('');
   const [toast, setToast] = useState('');
@@ -388,7 +389,7 @@ export function SettingsPage({ me, onClose, initial }: { me: AccountInfo | null;
 
   return (
     <div className="settings-layer">
-      {page === 'transfer' ? <TransferPage onBack={() => (initial ? onClose() : setPage('main'))} /> : page === 'accounts' ? <AccountsPage onBack={() => setPage('main')} /> : page === 'sources' ? <SourcesPage onBack={() => setPage('main')} /> : (
+      {page === 'blocked' ? <BlockedPage onBack={() => setPage('main')} /> : page === 'transfer' ? <TransferPage onBack={() => (initial ? onClose() : setPage('main'))} /> : page === 'accounts' ? <AccountsPage onBack={() => setPage('main')} /> : page === 'sources' ? <SourcesPage onBack={() => setPage('main')} /> : (
         <Page title="Settings" onBack={onClose}>
           <Group>
             <Row icon="person" title="Account & integrations" sub={IS_MOBILE ? 'Scrobbling with Last.fm and ListenBrainz' : me ? `${me.name}${me.email ? ' · ' + me.email : ''}` : 'Not signed in'} onClick={() => setPage('accounts')} />
@@ -421,6 +422,8 @@ export function SettingsPage({ me, onClose, initial }: { me: AccountInfo | null;
             <Row icon="waves" title="Crossfade" sub={s.crossfade ? `Songs blend for ${s.crossfade} seconds` : 'Off: songs change with a short fade'} value={s.crossfade ? `${s.crossfade}s` : 'Off'}>
               <input className="s-slider" type="range" min={0} max={12} step={1} value={s.crossfade} style={{ ['--p' as string]: `${(s.crossfade / 12) * 100}%` }} onChange={(e) => save({ crossfade: Number(e.target.value) })} aria-label="Crossfade seconds" />
             </Row>
+            <Row icon="block" title="Blocked songs and artists" sub="Never played by autoplay, radio or the queue" onClick={() => setPage('blocked')} />
+            <Row icon="waves" title="Gapless playback" sub={s.crossfade ? 'Off while crossfade is on' : 'Albums and live sets play with no silence between songs'} toggle={{ on: s.gapless && !s.crossfade, set: (v) => save({ gapless: v }) }} disabled={!!s.crossfade} />
             <Row icon="volume-off" title="Hide volume bar" sub="Removes the volume slider from the player" toggle={{ on: s.hideVolume, set: (v) => save({ hideVolume: v }) }} />
           </Group>
 
@@ -433,6 +436,11 @@ export function SettingsPage({ me, onClose, initial }: { me: AccountInfo | null;
             <Row icon="lyrics" title="Synced lyrics" sub="Lights up the words on the player as they're sung" toggle={{ on: s.syncedLyrics, set: (v) => save({ syncedLyrics: v }) }} />
             <Row icon="sparkle" title="Blur unfocused lyrics" sub="Keeps the spotlight on the current line" toggle={{ on: s.blurLyrics, set: (v) => save({ blurLyrics: v }) }} />
             <Row icon="globe" title="Lyrics sources" sub={lyricsSummary} onClick={() => setLyricsOpen(true)} />
+            <Row icon="globe" title="Translate lyrics into" sub="Used by Translated on the lyrics screen">
+              <select className="s-select" value={s.lyricsLang} onChange={(e) => save({ lyricsLang: e.target.value })} aria-label="Translate lyrics into">
+                {LYRIC_LANGS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </select>
+            </Row>
           </Group>
 
           <Group label="Your data">
@@ -456,5 +464,28 @@ export function SettingsPage({ me, onClose, initial }: { me: AccountInfo | null;
       {lyricsOpen && <LyricsSourcesSheet onClose={() => setLyricsOpen(false)} />}
       {toast && <div className="toast">{toast}</div>}
     </div>
+  );
+}
+
+const LYRIC_LANGS: [string, string][] = [['en', 'English'], ['hi', 'Hindi'], ['te', 'Telugu'], ['ta', 'Tamil'], ['kn', 'Kannada'], ['ml', 'Malayalam'], ['bn', 'Bengali'], ['mr', 'Marathi'], ['gu', 'Gujarati'], ['pa', 'Punjabi'], ['ur', 'Urdu'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German'], ['pt', 'Portuguese'], ['ru', 'Russian'], ['ar', 'Arabic'], ['ja', 'Japanese'], ['ko', 'Korean'], ['zh-CN', 'Chinese (Simplified)'], ['zh-TW', 'Chinese (Traditional)']];
+
+function BlockedPage({ onBack }: { onBack: () => void }) {
+  const [b, setB] = useState<Blocked | null>(null);
+  useEffect(() => {
+    const read = () => getBlocked().then(setB);
+    read();
+    const fn = (c: Record<string, chrome.storage.StorageChange>) => { if (c.blocked) read(); };
+    chrome.storage.onChanged.addListener(fn);
+    return () => chrome.storage.onChanged.removeListener(fn);
+  }, []);
+  return (
+    <Page title="Blocked" onBack={onBack}>
+      <Group label="Artists" foot={b?.artists.length ? undefined : 'Block an artist from the ⋯ menu on Now Playing.'}>
+        {b?.artists.map((a) => <Row key={a.name} icon="person" title={a.name} value="Unblock" onClick={() => blockArtist(a.name, a.id, false)} />)}
+      </Group>
+      <Group label="Songs" foot={b?.songs.length ? undefined : 'Choose “Don’t Play This Song” in any song’s ⋯ menu.'}>
+        {b?.songs.map((t) => <Row key={t.videoId} icon={t.thumbnail ? <img className="s-thumb" src={t.thumbnail} alt="" /> : 'block'} title={t.title} sub={t.artists} value="Allow" onClick={() => blockSong({ ...t, thumbnail: t.thumbnail ?? '' }, false)} />)}
+      </Group>
+    </Page>
   );
 }

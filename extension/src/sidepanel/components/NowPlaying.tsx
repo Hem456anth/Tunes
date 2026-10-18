@@ -1,3 +1,4 @@
+import { hasTranslateAccess, lyricExtra, requestTranslateAccess, type LyricExtra } from '../../lib/lyricsTranslate';
 import { sized } from '../../lib/innertube';
 import { toSeconds } from '../../lib/matcher';
 import { useEffect, useRef, useState } from 'react';
@@ -95,28 +96,79 @@ function LyricsPane({ s, settings }: { s: PlayerState; settings: Settings }) {
   }, [t?.videoId, hasLen]);
   const lines = settings.syncedLyrics ? ly?.synced : null;
   const cur = lines ? lines.findLastIndex((l) => l.time <= pos + 0.25) : -1;
+  const plainLines = ly ? (ly.plain ?? (!settings.syncedLyrics && ly.synced ? ly.synced.map((l) => l.text).join('\n') : null))?.split('\n') ?? null : null;
+  const texts = lines ? lines.map((l) => l.text) : plainLines ?? [];
+  const extra = useLyricExtra(t?.videoId ?? '', texts, settings);
   useEffect(() => {
     box.current?.querySelector('.ly.cur')?.scrollIntoView({ block: 'center', behavior: settings.reduceMotion ? 'auto' : 'smooth' });
   }, [cur, settings.reduceMotion]);
   if (!ly) return <div className="pane-empty"><span className="spinner" /></div>;
-  const plain = ly.plain ?? (!settings.syncedLyrics && ly.synced ? ly.synced.map((l) => l.text).join('\n') : null);
+  const plain = plainLines;
   if (!lines && !plain) return <div className="pane-empty">No lyrics found{settings.lyricsDebug && <pre className="ly-debug">{lyricsDebug.slice(-8).join('\n')}</pre>}</div>;
+  const sub = (i: number) => (extra.data?.lines[i] ? <span className="ly-sub" lang={settings.lyricsMode === 'translate' ? settings.lyricsLang : undefined}>{extra.data.lines[i]}</span> : null);
   return (
     <div className={`lyrics ${settings.blurLyrics ? 'blur' : ''}`} ref={box}>
+      <LyricModes settings={settings} extra={extra} />
       {lines
         ? lines.map((l, i) => (
             <p key={i} className={`ly ${i === cur ? 'cur' : i < cur ? 'past' : ''} ${l.words ? 'wordy' : ''}`} style={{ ['--d' as string]: Math.min(Math.abs(i - cur), 4) }}
               role="button" tabIndex={-1} onClick={() => send({ type: 'seek', seconds: l.time })}>
               {l.words && i === cur ? <LiveWords l={l} s={s} /> : l.text || '♪'}
+              {sub(i)}
             </p>
           ))
-        : plain!.split('\n').map((l, i) => <p key={i} className="ly plain">{l}</p>)}
+        : plain!.map((l, i) => <p key={i} className="ly plain">{l}{sub(i)}</p>)}
       {ly.source && <div className="ly-source">Lyrics from {ly.source}{ly.wordSynced ? ' · word by word' : ''}</div>}
       {settings.lyricsDebug && <pre className="ly-debug">{lyricsDebug.slice(-8).join('\n')}</pre>}
     </div>
   );
 }
 
+
+/** Translation or romanization of the lines on screen, fetched once per song and cached. */
+function useLyricExtra(songId: string, texts: string[], settings: Settings) {
+  const [st, setSt] = useState<{ data: LyricExtra | null; error: string | null; loading: boolean }>({ data: null, error: null, loading: false });
+  const sig = texts.join('\u0001');
+  useEffect(() => {
+    if (settings.lyricsMode === 'off' || !texts.length) { setSt({ data: null, error: null, loading: false }); return; }
+    let alive = true;
+    setSt({ data: null, error: null, loading: true });
+    (async () => {
+      if (!(await hasTranslateAccess())) { if (alive) setSt({ data: null, error: 'access', loading: false }); return; }
+      try {
+        const d = await lyricExtra(songId, texts, settings.lyricsLang, settings.lyricsMode as 'translate' | 'romanize');
+        if (alive) setSt({ data: d, error: null, loading: false });
+      } catch (e) { if (alive) setSt({ data: null, error: (e as Error).message, loading: false }); }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [songId, sig, settings.lyricsMode, settings.lyricsLang]);
+  return st;
+}
+
+function LyricModes({ settings, extra }: { settings: Settings; extra: ReturnType<typeof useLyricExtra> }) {
+  const set = async (m: Settings['lyricsMode']) => {
+    if (m !== 'off' && !(await hasTranslateAccess()) && !(await requestTranslateAccess())) return;
+    const all = (await chrome.storage.local.get('settings')).settings ?? {};
+    await chrome.storage.local.set({ settings: { ...all, lyricsMode: m } });
+  };
+  const mode = settings.lyricsMode;
+  const note = extra.loading ? 'Working…'
+    : extra.error === 'access' ? 'Allow translation to show this'
+    : extra.error ? extra.error
+    : extra.data?.same ? (mode === 'romanize' ? 'Already in Latin letters' : 'Already in your language')
+    : '';
+  return (
+    <div className="ly-modes" role="radiogroup" aria-label="Lyrics view">
+      {(['off', 'romanize', 'translate'] as const).map((m) => (
+        <button key={m} role="radio" aria-checked={mode === m} className={`schip ${mode === m ? 'on' : ''}`} onClick={() => set(m)}>
+          {m === 'off' ? 'Original' : m === 'romanize' ? 'Romanized' : 'Translated'}
+        </button>
+      ))}
+      {note && <span className="ly-note" role="status">{note}</span>}
+    </div>
+  );
+}
 
 const SLEEP_OPTIONS: { label: string; min: number }[] = [
   { label: '15 minutes', min: 15 }, { label: '30 minutes', min: 30 }, { label: '45 minutes', min: 45 },
@@ -176,21 +228,22 @@ export function NowPlaying({ s, settings, onArtist }: { s: PlayerState; settings
       {pane === 'none' ? (
         <div className="np-art"><img src={sized(t.thumbnail, 544)} alt={t.title} /></div>
       ) : (
-        <div className="np-pane">{pane === 'lyrics' ? <LyricsPane s={s} settings={settings} /> : <QueuePane s={s} />}</div>
+        <div className="np-pane">{pane === 'lyrics' && !t.podcast ? <LyricsPane s={s} settings={settings} /> : <QueuePane s={s} />}</div>
       )}
       <div className="np-titlebar">
         <div className="np-titles">
           <div className="np-title" title={t.title}>{t.title}</div>
-          <div className="np-artist link" onClick={() => onArtist(t.artists, t.artistId)}>{t.artists}</div>
+          {t.podcast ? <div className="np-artist">{t.artists}</div> : <div className="np-artist link" onClick={() => onArtist(t.artists, t.artistId)}>{t.artists}</div>}
         </div>
-        <button className={`icon-btn ${liked ? 'on' : ''}`} title="Like" aria-pressed={liked} onClick={() => toggleLiked(t).then(setLiked)}>
+        {!t.podcast && <><button className={`icon-btn ${liked ? 'on' : ''}`} title="Like" aria-pressed={liked} onClick={() => toggleLiked(t).then(setLiked)}>
           <Icon name={liked ? 'heart' : 'heart-o'} />
         </button>
         <button className="icon-btn np-more" title="More" aria-label="More options" aria-haspopup="menu" onClick={() => openSongMenu(t, { nowPlaying: true })}>
           <Icon name="more" />
-        </button>
+        </button></>}
       </div>
       <Seek s={s} />
+      {t.podcast && <PodcastBar s={s} />}
       {s.error ? (
         <div className="np-error" role="alert">
           <span>{s.error}</span>
@@ -207,7 +260,7 @@ export function NowPlaying({ s, settings, onArtist }: { s: PlayerState; settings
       <Controls s={s} />
       <div className="np-bottom">
         <span className="np-side">
-          <button className={`icon-btn ${pane === 'lyrics' ? 'on' : ''}`} title="Lyrics" onClick={() => setPane(pane === 'lyrics' ? 'none' : 'lyrics')}><Icon name="lyrics" /></button>
+          {!t.podcast && <button className={`icon-btn ${pane === 'lyrics' ? 'on' : ''}`} title="Lyrics" onClick={() => setPane(pane === 'lyrics' ? 'none' : 'lyrics')}><Icon name="lyrics" /></button>}
         </span>
         {settings.hideVolume ? <span className="vol" /> : (
           <label className="vol"><Icon name="volume" size={18} />
@@ -219,6 +272,20 @@ export function NowPlaying({ s, settings, onArtist }: { s: PlayerState; settings
           <SleepButton s={s} />
         </span>
       </div>
+    </div>
+  );
+}
+
+const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
+/** Episodes: back 15 s, speed, forward 30 s. */
+function PodcastBar({ s }: { s: PlayerState }) {
+  const rate = s.rate ?? 1;
+  const nextRate = RATES[(RATES.indexOf(rate) + 1) % RATES.length] ?? 1;
+  return (
+    <div className="pod-bar">
+      <button className="icon-btn skip" aria-label="Back 15 seconds" title="Back 15 seconds" onClick={() => send({ type: 'skip', seconds: -15 })}><Icon name="skip-back" size={26} /><span>15</span></button>
+      <button className="q-pill rate" aria-label={`Playback speed ${rate}×, change to ${nextRate}×`} title="Playback speed" onClick={() => send({ type: 'rate', value: nextRate })}>{rate}×</button>
+      <button className="icon-btn skip" aria-label="Forward 30 seconds" title="Forward 30 seconds" onClick={() => send({ type: 'skip', seconds: 30 })}><Icon name="skip-fwd" size={26} /><span>30</span></button>
     </div>
   );
 }

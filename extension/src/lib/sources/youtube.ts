@@ -45,7 +45,7 @@ export interface ResolvedStream {
   url: string;
   mimeType: string;
   kbps: number;
-  source: 'youtube' | 'jiosaavn';
+  source: 'youtube' | 'jiosaavn' | 'podcast';
   client?: string;
   userAgent?: string;
   durationSec?: number;

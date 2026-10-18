@@ -11,7 +11,7 @@ const inflight = new Map<string, Promise<unknown>>();
 export const CACHE_PREFIX = 'c2:';
 const INDEX = 'c2-index';
 const LEGACY = /^c:/;
-const MAX_KEYS = 40;
+const MAX_KEYS = 120; // podcast feeds share this cache (1.3.0)
 
 export async function readCache<T>(key: string): Promise<Entry<T> | null> {
   const m = mem.get(key) as Entry<T> | undefined;

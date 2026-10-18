@@ -103,7 +103,11 @@ function makeSlot(token: number, useGraph: boolean): Slot {
   el.addEventListener('loadedmetadata', () => { s.metaReady = true; });
   el.addEventListener('playing', () => emit(s, 'playing'));
   el.addEventListener('pause', () => s === active && emit(s, 'pause'));
-  el.addEventListener('ended', () => s === active && emit(s, 'ended'));
+  el.addEventListener('ended', () => {
+    if (s !== active) return;
+    emit(s, 'ended');
+    startPreloaded(s);
+  });
   el.addEventListener('durationchange', () => s === active && emit(s, 'time'));
   return s;
 }
@@ -125,11 +129,59 @@ try {
   ms.setActionHandler('seekto', (d) => { if (d.seekTime == null) return; if (embedActive()) embedCommand('seek', { seconds: d.seekTime }); else if (active) active.el.currentTime = d.seekTime; });
 } catch { /* ignore */ }
 
-interface LoadMsg { url: string; token: number; volume?: number; startAt?: number; fade?: number; meta?: { title: string; artist: string; album?: string; artwork?: string } }
+/** Episodes get the 15 s back / 30 s forward media keys; songs keep next/previous. */
+function setSkipKeys(on: boolean) {
+  try {
+    const ms = navigator.mediaSession;
+    ms.setActionHandler('seekbackward', on ? (d) => { if (active) active.el.currentTime = Math.max(0, active.el.currentTime - (d.seekOffset || 15)); } : null);
+    ms.setActionHandler('seekforward', on ? (d) => { if (active) active.el.currentTime = Math.min((active.el.duration || Infinity) - 1, active.el.currentTime + (d.seekOffset || 30)); } : null);
+  } catch { /* ignore */ }
+}
+// ---------- gapless: the next song waits, loaded, and starts the instant this one ends ----------
+let preloaded: { slot: Slot; url: string } | null = null;
+const ADOPT = -4; // a preloaded song playing before the service worker has named it
+function dropPreloaded() { if (preloaded) { kill(preloaded.slot); preloaded = null; } }
+function preload(msg: { url: string; rate?: number; podcast?: boolean }) {
+  if (preloaded?.url === msg.url) return;
+  dropPreloaded();
+  const s = makeSlot(-3, false);
+  s.el.preservesPitch = true;
+  s.el.defaultPlaybackRate = s.el.playbackRate = msg.rate && msg.rate >= 0.5 && msg.rate <= 3 ? msg.rate : 1;
+  s.el.src = msg.url;
+  s.el.load();
+  preloaded = { slot: s, url: msg.url };
+}
+function startPreloaded(ending: Slot) {
+  const p = preloaded;
+  if (!p || p.slot.el.error) { dropPreloaded(); return; }
+  preloaded = null;
+  p.slot.token = ADOPT;
+  active = p.slot;
+  setVol(p.slot, target);
+  p.slot.el.play().catch(() => {});
+  kill(ending);
+}
+interface LoadMsg { url: string; token: number; volume?: number; startAt?: number; fade?: number; rate?: number; podcast?: boolean; meta?: { title: string; artist: string; album?: string; artwork?: string } }
 
 let loadSeq = 0;
 async function load(msg: LoadMsg, plain = false) {
   const seq = ++loadSeq;
+  // Gapless: the song is already playing (or loaded and waiting): adopt it instead of starting over.
+  const ready = active && active.token === ADOPT && active.el.getAttribute('src') === msg.url ? active
+    : preloaded?.url === msg.url && !preloaded.slot.el.error ? preloaded.slot : null;
+  if (ready) {
+    if (ready === preloaded?.slot) { preloaded = null; const prev = active; active = ready; if (prev && prev !== ready) kill(prev); }
+    ready.token = msg.token;
+    target = (msg.volume ?? 100) / 100;
+    setVol(ready, target);
+    setMeta(msg.meta);
+    setSkipKeys(!!msg.podcast);
+    ready.el.addEventListener('error', () => { if (ready.token === msg.token) emit(ready, 'error', { message: ready.el.error?.message || `media error ${ready.el.error?.code}`, code: ready.el.error?.code }); });
+    if (ready.el.paused) ready.el.play().catch(() => {});
+    else emit(ready, 'playing');
+    return;
+  }
+  dropPreloaded();
   target = (msg.volume ?? 100) / 100;
   const xfade = Math.max(0, msg.fade ?? 0);
   // Build the graph on first use; a context that can't run means plain playback.
@@ -154,6 +206,9 @@ async function load(msg: LoadMsg, plain = false) {
     if (s.gain && !s.metaReady && !s.plainRetry) { kill(s); void load({ ...msg, startAt: msg.startAt, fade: 0 }, true); return; }
     emit(s, 'error', { message: s.el.error?.message || `media error ${s.el.error?.code}`, code: s.el.error?.code });
   });
+  s.el.preservesPitch = true;
+  s.el.defaultPlaybackRate = s.el.playbackRate = msg.rate && msg.rate >= 0.5 && msg.rate <= 3 ? msg.rate : 1;
+  setSkipKeys(!!msg.podcast);
   s.el.src = msg.url;
   if ((msg.startAt ?? 0) > 1) s.el.addEventListener('loadedmetadata', () => { try { s.el.currentTime = msg.startAt!; } catch { /* ignore */ } }, { once: true });
   setMeta(msg.meta);
@@ -180,6 +235,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     return;
   }
   if (msg.cmd === 'load' || msg.cmd === 'stop') embedStop();
+  if (msg.cmd === 'stop') dropPreloaded();
   else if (embedActive() && ['play', 'pause', 'toggle', 'seek', 'volume', 'fade-pause'].includes(msg.cmd)) {
     if (msg.cmd === 'volume') target = msg.value / 100;
     embedCommand(msg.cmd, msg);
@@ -195,6 +251,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     case 'fade-pause': if (active) { const s = active; fade(s, 0, (msg.ms ?? 4000)).then(() => { s.el.pause(); setVol(s, target); }); } break;
     case 'toggle': if (a) { if (a.paused) { if (active!.vol < 0.05) setVol(active!, target); a.play().catch(() => {}); } else a.pause(); } break;
     case 'seek': if (a) a.currentTime = msg.seconds; break;
+    case 'rate': if (a && msg.value >= 0.5 && msg.value <= 3) a.playbackRate = a.defaultPlaybackRate = msg.value; break;
     case 'volume': target = msg.value / 100; if (active && !active.ramp) setVol(active, target); break;
     case 'eq': eqOn = !!msg.on; if (Array.isArray(msg.gains)) eqGains = msg.gains; if (eqOn) graph(); applyEq(); break; // background always sends on:false
     case 'stop': {
@@ -203,6 +260,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       if (s) { s.token = -1; if (!s.el.paused && s.vol > 0.05) fade(s, 0, 120).then(() => kill(s)); else kill(s); }
       break;
     }
+    case 'preload': if (typeof msg.url === 'string') preload(msg); break;
     case 'ping': break;
   }
   reply?.({ ok: true, eq: !!active?.gain });

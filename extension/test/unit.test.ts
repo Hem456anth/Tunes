@@ -111,3 +111,52 @@ test('innertube: a signed-in 403 falls back to guest, other errors do not', asyn
   assert.equal(n, 1);
   (globalThis as any).chrome.cookies.getAll = async () => [];
 });
+
+const { refineRadio, blend } = await import('../src/lib/suggest');
+const { isBlocked, creditNames } = await import('../src/lib/blocklist');
+const tr = (id: string, title: string, artists: string) => ({ videoId: id.padEnd(11, 'x'), title, artists, thumbnail: '' });
+test('blocklist: songs and artists, whole names only', () => {
+  const b = { songs: [{ videoId: 'aaaaaaaaaaa', title: '', artists: '', at: 0 }], artists: [{ name: 'Anirudh', at: 0 }] };
+  assert.ok(isBlocked(tr('aaaaaaaaaaa', 'x', 'y'), b));
+  assert.ok(isBlocked(tr('b', 'Song', 'Arijit Singh, Anirudh'), b));
+  assert.ok(!isBlocked(tr('c', 'Song', 'Anirudh Ravichander Fans'), b), 'not a substring match');
+  assert.ok(!isBlocked({ ...tr('aaaaaaaaaaa', 'x', 'y'), podcast: { url: '', type: '', feedUrl: '' } }, b), 'podcasts never blocked by song rules');
+  assert.deepEqual(creditNames('A, B & C feat. D'), ['a', 'b', 'c', 'd']);
+});
+test('suggestions: no repeats, no duplicate uploads, no blocked, artists spread out', () => {
+  const cands = [
+    tr('r1', 'Heard', 'X'), tr('d1', 'Tum Hi Ho', 'Arijit Singh'), tr('d2', 'Tum Hi Ho (Lyric Video)', 'Arijit Singh'),
+    tr('a1', 'One', 'Same'), tr('a2', 'Two', 'Same'), tr('a3', 'Three', 'Same'), tr('o1', 'Other', 'Else'),
+    tr('bl', 'Blocked', 'Nope'), tr('ls', 'Less', 'Z'),
+  ];
+  const out = refineRadio(cands, { queued: new Set(), recent: [tr('r1', 'Heard', 'X')], less: new Set(['ls'.padEnd(11, 'x')]), blocked: { songs: [], artists: [{ name: 'Nope', at: 0 }] } });
+  const ids = out.map((t) => t.videoId.replace(/x+$/, ''));
+  assert.ok(!ids.includes('r1') && !ids.includes('d2') && !ids.includes('bl') && !ids.includes('ls'), ids.join());
+  const leads = out.map((t) => t.artists);
+  for (let i = 2; i < leads.length; i++) assert.ok(!(leads[i] === leads[i - 1] && leads[i] === leads[i - 2]), 'three in a row: ' + leads.join());
+  assert.equal(blend([tr('a', 'a', 'a'), tr('b', 'b', 'b'), tr('c', 'c', 'c')], [tr('z', 'z', 'z')]).length, 4);
+});
+
+const { batches, parseAnswer, lyricExtra } = await import('../src/lib/lyricsTranslate');
+test('lyrics translation: batching and splitting back into lines', async () => {
+  const lines = ['Hello', '', 'How are you', '♪', 'Goodbye'];
+  const b = batches(lines);
+  assert.equal(b.length, 1); assert.deepEqual(b[0].idx, [0, 2, 4]);
+  assert.equal(b[0].payload.split(/\uE000\d{4}\uE001/).length, 3);
+  assert.equal(batches(Array.from({ length: 40 }, () => 'x'.repeat(200))).length, 3, 'about 3,500 characters per request');
+  // Google's answer: segments, then the detected language at [2]; romanization in segment[3].
+  const ans = [[['నమస్కారం\n\uE0000001\uE001\n', 'Hello'], ['మీరు ఎలా ఉన్నారు\n\uE0000002\uE001\n', 'How are you'], ['వీడ్కోలు', 'Goodbye']], null, 'en'];
+  assert.deepEqual(parseAnswer(ans, 0, 3), { parts: ['నమస్కారం', 'మీరు ఎలా ఉన్నారు', 'వీడ్కోలు'], source: 'en' });
+  assert.equal(parseAnswer(ans, 0, 4), null, 'a lost marker means no answer, never misaligned lines');
+  const calls: string[] = [];
+  globalThis.fetch = (async (_u: string, init: any) => { calls.push(String(init.body)); return { ok: true, status: 200, json: async () => ans } as any; }) as any;
+  const r = await lyricExtra('song1', lines, 'te', 'translate');
+  assert.deepEqual(r.lines, ['నమస్కారం', null, 'మీరు ఎలా ఉన్నారు', null, 'వీడ్కోలు']);
+  assert.equal(r.source, 'en'); assert.ok(!r.same);
+  await lyricExtra('song1', lines, 'te', 'translate');
+  assert.equal(calls.length, 1, 'cached per song');
+  const same = await lyricExtra('song2', lines, 'en', 'translate');
+  assert.ok(same.same && same.lines.every((x) => x === null), 'already in your language');
+  const rm = await lyricExtra('song3', ['Hello'], 'en', 'romanize');
+  assert.ok(rm.same, 'Latin lyrics need no romanization');
+});
