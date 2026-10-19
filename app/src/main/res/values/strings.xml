@@ -331,7 +331,7 @@
     <string name="play_next_on_swipe">Play next on swipe</string>
     <string name="dont_repeat_songs">Don’t repeat songs in current session</string>
     <string name="stop_music_on_close">Stop music on close from recents</string>
-    <string name="stop_music_on_close_subtitle">Stops playback when swiped away from recent apps</string>
+    <string name="stop_music_on_close_subtitle">Stops playback when swiped away from recent apps. Turn off to keep music playing in the background</string>
     <string name="hide_volume_bar">Hide volume bar</string>
     <string name="hide_volume_bar_subtitle">Removes the volume slider from the main player</string>
     <string name="hide_song_status">Hide Song Status</string>

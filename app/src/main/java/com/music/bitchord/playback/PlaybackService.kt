@@ -6469,23 +6469,72 @@ class PlaybackService : MediaLibraryService() {
      * Called by Android when the user swipes this app's task away from the
      * recent apps screen.
      *
-     * When [AppSettings.stopOnTaskRemoved] is on we stop the player and let the
-     * service die naturally; otherwise we leave it running in the background so
-     * music continues past the swipe, which is the default Android behaviour for
-     * a foreground-service-backed media session.
+     * Swiping Tunes away is the user closing it, so playback stops with it
+     * unless [TaskRemovalPolicy] says it is meant to carry on: the user turned
+     * off "Stop music on close from recents", or a car is driving the session.
+     *
+     * Before 3.1.2 the setting defaulted to off and this method then fell
+     * through to Media3's default, which deliberately keeps a *playing* session
+     * alive in the foreground — so music kept going after every swipe.
      */
     override fun onTaskRemoved(rootIntent: Intent?) {
-        super.onTaskRemoved(rootIntent)
-        if (AppSettings.stopOnTaskRemoved.value) {
-            // A receiver left playing with nothing on the phone to drive it
-            // would run out its few queued tracks and stop on its own anyway;
-            // better to say so now than leave the TV on a casting screen.
-            if (castPlayback.active) CastController.disconnect(resumeHere = false)
-            // Both, or a swipe-away mid-crossfade leaves the outgoing track
-            // playing on its own out of a service that is on its way out.
-            eachPlayer { it.stop() }
-            stopSelf()
+        val decision = TaskRemovalPolicy.decide(
+            stopOnClose = AppSettings.stopOnTaskRemoved.value,
+            controllerPackages = mediaSession?.connectedControllers
+                ?.map { it.packageName }
+                .orEmpty(),
+        )
+        if (decision == TaskRemovalPolicy.Decision.KEEP_PLAYING) {
+            // Media3's default: keeps a playing session going and stops the
+            // service when nothing is playing.
+            super.onTaskRemoved(rootIntent)
+            return
         }
+        stopForDismissal()
+    }
+
+    /**
+     * Tears playback down because the user closed the app: no audio, no audio
+     * focus, no decoders, no foreground notification, and nothing left that can
+     * start the music again by itself. The queue and position are saved, so
+     * the next launch (or a headset play button) resumes where it stopped.
+     *
+     * Goes to the ExoPlayers directly rather than through the session's
+     * forwarding player: a Listen Together guest whose host holds control has
+     * pause refused there, and closing the app must still stop it.
+     */
+    private fun stopForDismissal() {
+        TrackLog.d("BitChord", "task removed: stopping playback")
+        // Party sync can reconcile a guest back into playing; cut it first.
+        partySync?.stop()
+        partySync = null
+        // A receiver left playing with nothing on the phone to drive it would
+        // run out its few queued tracks and stop on its own anyway; better to
+        // say so now than leave the TV on a casting screen.
+        if (castPlayback.active) CastController.disconnect(resumeHere = false)
+        // Jobs that finish with a play() of their own (a version swap, a
+        // quality upgrade, an autoplay load) must not outlive the swipe.
+        versionSwapJob?.cancel()
+        upgradeJob?.cancel()
+        autoplayLoadJob?.cancel()
+        loudnessRetryJob?.cancel()
+        cancelPrefetch()
+        // Drop any crossfade in flight, or its ticker keeps mirroring play
+        // state between the two players.
+        crossfade?.onSkipRequested()
+        player?.let(::savePlaybackState)
+        // A stopped player is idle; without this Media3 keeps showing a
+        // (dismissible) notification for it after the service has gone.
+        setShowNotificationForIdlePlayer(SHOW_NOTIFICATION_FOR_IDLE_PLAYER_NEVER)
+        // Both players, or a swipe-away mid-crossfade leaves the outgoing track
+        // playing on its own. stop() releases decoders and the audio track, and
+        // playWhenReady=false makes ExoPlayer abandon audio focus.
+        eachPlayer {
+            it.playWhenReady = false
+            it.stop()
+        }
+        publishWidgetState(playing = false)
+        stopSelf()
     }
 
 

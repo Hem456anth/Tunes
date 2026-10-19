@@ -30,6 +30,12 @@ player extension (see [`extension/`](extension/README.md)).
 
 ## What's new
 
+### 3.1.2 (19 Oct 2026)
+- Swiping Tunes away from Recent Apps now stops the music, clears the notification and releases
+  audio focus, like other players. Your queue and position are saved.
+- Want music to keep going after closing the app? Turn off Settings → "Stop music on close from
+  recents". Playback also keeps going when Android Auto is connected.
+
 ### 3.1.1 (18 Oct 2026)
 - The 3.0 **Explore** is back: grouped sections of colorful two-column mood and genre cards.
 - The 3.0 **Search** is back: text suggestions with a "Search 'term'" row first, no media cards
@@ -52,7 +58,7 @@ player extension (see [`extension/`](extension/README.md)).
 ## What Tunes changes (relative to BitChord)
 
 - **Identity:** package `app.tunes.music` (dev flavor `app.tunes.music.dev`),
-  name "Tunes", version 3.1.1 (versionCode 5), blue logomark and launcher icon. Installs
+  name "Tunes", version 3.1.2 (versionCode 6), blue logomark and launcher icon. Installs
   beside BitChord and over every earlier Tunes release (same signing key). Internal Kotlin
   package names stay `com.music.bitchord` to keep the fork easy to rebase.
 - **Blue instead of red:** every red button and accent (delete, sign out, remove
