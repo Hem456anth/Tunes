@@ -275,7 +275,7 @@ fun clearSpotifyWebSession() {
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun SpotifyLogin(
+internal fun SpotifyLogin(
     onConnected: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {

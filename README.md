@@ -29,6 +29,11 @@ player extension (see [`extension/`](extension/README.md)).
 ## What's new
 
 ### 3.1.2 (19 Oct 2026)
+- **Music Transfer** (Settings → Music Transfer): bring liked songs, playlists, saved albums and
+  followed artists from Spotify, Deezer, Apple Music and YouTube links, or a CSV/TXT/M3U export
+  from TuneMyMusic, Soundiiz or Exportify, into your YouTube Music library or playlists on your
+  phone. It shows live progress, skips duplicates, merges same-name playlists, pauses and resumes,
+  and lets you pick matches for songs it couldn't find. See [docs/music-transfer.md](docs/music-transfer.md).
 - Swiping Tunes away from Recent Apps now stops the music, clears the notification and releases
   audio focus, like other players. Your queue and position are saved.
 - Want music to keep going after closing the app? Turn off Settings → "Stop music on close from

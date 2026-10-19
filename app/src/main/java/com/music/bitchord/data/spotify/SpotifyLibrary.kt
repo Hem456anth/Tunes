@@ -42,6 +42,14 @@ data class SpotifyTrack(
     val imageUrl: String?,
 )
 
+/** A saved album or followed artist in the Spotify library, as Music Transfer lists them. */
+data class SpotifyLibraryEntity(
+    val id: String,
+    val name: String,
+    val subtitle: String?,
+    val imageUrl: String?,
+)
+
 object SpotifyLibrary {
     private const val GQL = "https://api-partner.spotify.com/pathfinder/v2/query"
     private const val LIBRARY = "973e511ca44261fda7eebac8b653155e7caee3675abb4fb110cc1b8c78b091c3"
@@ -94,6 +102,45 @@ object SpotifyLibrary {
             if (raw == 0 || offset >= total) break
         }
         collected
+    }
+
+    /** Every saved album, for Music Transfer. */
+    suspend fun albums(): List<SpotifyLibraryEntity> = libraryEntities("Albums", "Album")
+
+    /** Every followed artist, for Music Transfer. */
+    suspend fun artists(): List<SpotifyLibraryEntity> = libraryEntities("Artists", "Artist")
+
+    private suspend fun libraryEntities(filter: String, typeName: String): List<SpotifyLibraryEntity> =
+        withContext(Dispatchers.IO) {
+            val headers = authHeaders()
+            val collected = mutableListOf<SpotifyLibraryEntity>()
+            var offset = 0
+            while (true) {
+                val root = gql("libraryV3", LIBRARY, libraryVariables(filter, offset), headers)
+                val (items, total, raw) = parseLibraryEntityPage(root, typeName)
+                collected += items
+                offset += raw
+                if (raw == 0 || offset >= total || offset > 5_000) break
+            }
+            collected
+        }
+
+    private fun libraryVariables(filter: String, offset: Int) = buildJsonObject {
+        putJsonArray("filters") { add(filter) }
+        put("order", null as String?)
+        put("textFilter", "")
+        putJsonArray("features") {
+            add("LIKED_SONGS")
+            add("YOUR_EPISODES_V2")
+            add("PRERELEASES")
+            add("EVENTS")
+        }
+        put("limit", 50)
+        put("offset", offset)
+        put("flatten", true)
+        putJsonArray("expandedFolders") {}
+        put("folderUri", null as String?)
+        put("includeFoldersWhenFlattening", false)
     }
 
     private fun playlistPage(headers: Map<String, String>, offset: Int): Triple<List<SpotifyPlaylist>, Int, Int> {
@@ -220,6 +267,32 @@ internal fun parsePlaylistPage(root: JsonObject): Triple<List<SpotifyPlaylist>, 
             owner = data.obj("ownerV2")?.obj("data")?.str("name"),
             imageUrl = coverUrl(data.obj("images")),
         )
+    }
+    return Triple(items, library.int("totalCount") ?: rawItems.size, rawItems.size)
+}
+
+/**
+ * Saved albums or followed artists off a `libraryV3` page. Albums carry their
+ * artists under `artists.items[].profile.name` and art under `coverArt`;
+ * artists their name under `profile` and picture under `visuals.avatarImage`.
+ */
+internal fun parseLibraryEntityPage(root: JsonObject, typeName: String): Triple<List<SpotifyLibraryEntity>, Int, Int> {
+    val library = root.obj("data")?.obj("me")?.obj("libraryV3")
+        ?: throw IllegalStateException("Spotify library response was empty")
+    val rawItems = library.arr("items").orEmpty()
+    val items = rawItems.mapNotNull { element ->
+        val wrapper = element.jsonObject.obj("item") ?: return@mapNotNull null
+        val data = wrapper.obj("data") ?: return@mapNotNull null
+        if (data.str("__typename") != typeName) return@mapNotNull null
+        val uri = wrapper.str("_uri") ?: data.str("uri") ?: return@mapNotNull null
+        val name = (if (typeName == "Artist") data.obj("profile")?.str("name") else data.str("name")).orEmpty()
+        if (name.isBlank()) return@mapNotNull null
+        val subtitle = data.obj("artists")?.arr("items").orEmpty().mapNotNull { artist ->
+            artist.jsonObject.obj("profile")?.str("name")?.takeIf { it.isNotBlank() }
+        }.joinToString(", ").ifBlank { null }
+        val art = data.obj("coverArt")?.arr("sources")?.lastUrl()
+            ?: data.obj("visuals")?.obj("avatarImage")?.arr("sources")?.lastUrl()
+        SpotifyLibraryEntity(id = uri.substringAfterLast(":"), name = name, subtitle = subtitle, imageUrl = art)
     }
     return Triple(items, library.int("totalCount") ?: rawItems.size, rawItems.size)
 }

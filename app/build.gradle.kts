@@ -82,7 +82,7 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode only ever goes up (4 was Tunes 3.1.0, 3 was 3.0.x); same signing key.
-        versionCode = 6
+        versionCode = 7
         versionName = "3.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

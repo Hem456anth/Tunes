@@ -72,6 +72,24 @@ object LocalPlaylistStore {
         return playlist
     }
 
+    /** A playlist whose title matches [title] ignoring case and spacing, for Music Transfer's merge. */
+    fun findByTitle(title: String): LocalPlaylist? {
+        val wanted = title.trim().lowercase()
+        return _playlists.value.firstOrNull { it.title.trim().lowercase() == wanted }
+    }
+
+    /** Appends [songs] to playlist [id], leaving out any already in it. Returns how many went in. */
+    fun appendSongs(id: String, songs: List<Song>): Int {
+        val target = getPlaylist(id) ?: return 0
+        val have = target.songs.mapTo(HashSet()) { it.videoId }
+        val fresh = songs.filter { it.videoId.isNotBlank() && have.add(it.videoId) }
+        if (fresh.isEmpty()) return 0
+        val updated = _playlists.value.map { if (it.id == target.id) it.copy(songs = it.songs + fresh) else it }
+        _playlists.value = updated
+        persist(updated)
+        return fresh.size
+    }
+
     fun deletePlaylist(id: String) {
         val updated = _playlists.value.filterNot { it.id == id || it.browseId == id || it.id == id.removePrefix("local:playlist:") }
         _playlists.value = updated

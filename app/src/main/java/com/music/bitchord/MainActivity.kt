@@ -169,6 +169,7 @@ import com.music.bitchord.ui.screens.SourcesScreen
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.ui.screens.SpotifyCanvasAuthScreen
 import com.music.bitchord.ui.screens.SpotifyLibraryScreen
+import com.music.bitchord.ui.screens.MusicTransferScreen
 import com.music.bitchord.data.spotify.SPOTIFY_PAGE_PREFIX
 import com.music.bitchord.playback.AudioCache
 import com.music.bitchord.playback.LinkRequest
@@ -553,6 +554,7 @@ private fun BitChordApp(
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showListenTogether by rememberSaveable { mutableStateOf(false) }
     var showEqualizer by rememberSaveable { mutableStateOf(false) }
+    var showTransfer by rememberSaveable { mutableStateOf(false) }
     var showSpotifyCanvasAuth by remember { mutableStateOf(false) }
 
     // Hosted here rather than inside SourcesScreen so its frosted card has
@@ -731,6 +733,7 @@ private fun BitChordApp(
         showAccountScrobbling = false
         showSources = false
         showEqualizer = false
+        showTransfer = false
         showHistory = false
         showDiscord = false
         showSpotify = false
@@ -2378,6 +2381,7 @@ private fun BitChordApp(
                 showSources = false
                 showListenTogether = false
                 showEqualizer = false
+                showTransfer = false
                 showReplay = false
                 settingsSubScreen = null
                 showHistory = false
@@ -2465,7 +2469,7 @@ private fun BitChordApp(
         }
         BackHandler(
             enabled = detail != null && !showSettings && !showAccountScrobbling && !showSources && !showListenTogether &&
-                !showEqualizer && !showReplay,
+                !showEqualizer && !showTransfer && !showReplay,
         ) { viewModel.closeDetail() }
         BackHandler(enabled = selectedMoodGenre != null && detail == null && !showSettings && !showReplay) {
             viewModel.closeMoodGenre()
@@ -2492,10 +2496,14 @@ private fun BitChordApp(
             showEqualizer = false
             if (settingsSubScreen == "equalizer") settingsSubScreen = null
         }
+        BackHandler(enabled = showTransfer) {
+            showTransfer = false
+            if (settingsSubScreen == "music_transfer") settingsSubScreen = null
+        }
         // One back step out of Settings, or out of any tab but Home, lands on
         // Home rather than exiting — only Home itself hands back to the system,
         // which is what actually closes/minimizes the app.
-        BackHandler(enabled = showSettings && !showSpotify && !showAccountScrobbling && !showSources && !showListenTogether && !showEqualizer && !showReplay) {
+        BackHandler(enabled = showSettings && !showSpotify && !showAccountScrobbling && !showSources && !showListenTogether && !showEqualizer && !showTransfer && !showReplay) {
             showSettings = false
             // Only when Settings was the whole of what was on screen. Opened
             // over Replay or over a release page, closing it reveals that again
@@ -2504,7 +2512,7 @@ private fun BitChordApp(
         }
         BackHandler(
             enabled = detail == null && !showSettings && !showAccountScrobbling && !showSpotify &&
-                !showSources && !showListenTogether && !showEqualizer && !showReplay && selectedMoodGenre == null &&
+                !showSources && !showListenTogether && !showEqualizer && !showTransfer && !showReplay && selectedMoodGenre == null &&
                 selectedTab != TAB_HOME,
         ) {
             selectedTab = TAB_HOME
@@ -2549,6 +2557,7 @@ private fun BitChordApp(
                         showSources -> "sources"
                         showListenTogether -> "listen_together"
                         showEqualizer -> "equalizer"
+                        showTransfer -> "music_transfer"
                         // Above Replay, not below it. The top bar's account
                         // button sets `showSettings` from every page including
                         // this one, so with Replay winning the tie the button
@@ -2769,6 +2778,17 @@ private fun BitChordApp(
                         )
                     } else if (key == "equalizer") {
                         EqualizerScreen(contentPadding = listPadding)
+                    } else if (key == "music_transfer") {
+                        MusicTransferScreen(
+                            signedIn = signedIn,
+                            onSignIn = {
+                                showTransfer = false
+                                settingsSubScreen = null
+                                showSettings = false
+                                webSession = WebSessionMode.SIGN_IN
+                            },
+                            contentPadding = listPadding,
+                        )
                     } else if (key == "settings") {
                         SettingsScreen(
                             windowWidth = windowWidth,
@@ -2804,6 +2824,10 @@ private fun BitChordApp(
                             },
                             onSpotifyCanvasAuth = { showSpotifyCanvasAuth = true },
                             onAppLanguage = { showAppLanguage = true },
+                            onMusicTransfer = {
+                                settingsSubScreen = "music_transfer"
+                                showTransfer = true
+                            },
                             contentPadding = listPadding,
                         )
                     } else if (page != null && page.browseId.isDeviceFolder()) {
@@ -3356,6 +3380,23 @@ private fun BitChordApp(
                             EqualizerScreen(contentPadding = listPadding)
                         }
                     }
+                    "music_transfer" -> {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background,
+                        ) {
+                            MusicTransferScreen(
+                                signedIn = signedIn,
+                                onSignIn = {
+                                    showTransfer = false
+                                    settingsSubScreen = null
+                                    showSettings = false
+                                    webSession = WebSessionMode.SIGN_IN
+                                },
+                                contentPadding = listPadding,
+                            )
+                        }
+                    }
                     "replay" -> {
                         if (showReplay && !showReplayShare) {
                             Surface(
@@ -3401,7 +3442,7 @@ private fun BitChordApp(
                         detail.type == BrowseType.PLAYLIST ||
                         detail.type == BrowseType.ARTIST) &&
                     !isLocalDetail && !showDiscord && !showHistory && !showSettings &&
-                    !showAccountScrobbling && !showSources && !showListenTogether && !showEqualizer && !showReplay
+                    !showAccountScrobbling && !showSources && !showListenTogether && !showEqualizer && !showTransfer && !showReplay
                 val chromePageColor = if (isDetailVisible) {
                     detailPalette.background
                 } else {
@@ -3447,6 +3488,7 @@ private fun BitChordApp(
                         showSources -> stringResource(R.string.sources)
                         showListenTogether -> stringResource(R.string.listen_together)
                         showEqualizer -> stringResource(R.string.equalizer)
+                        showTransfer -> stringResource(R.string.music_transfer)
                         showSettings -> stringResource(R.string.settings)
                         showReplay -> stringResource(R.string.replay)
                         detail != null && detailActiveShelf != null -> detailActiveShelf?.title.orEmpty()
@@ -3466,7 +3508,7 @@ private fun BitChordApp(
                     // the field takes that space — so its bar title is always up.
                     scrolled = when {
                         showSettings || showAccountScrobbling || showSources || showListenTogether ||
-                            showEqualizer ||
+                            showEqualizer || showTransfer ||
                             showDiscord || showHistory ||
                             (libraryShowAll != null && detail == null) ||
                             (detail != null && detailActiveShelf != null) ||
@@ -3488,6 +3530,7 @@ private fun BitChordApp(
                         showSources -> ({ showSources = false })
                         showListenTogether -> ({ showListenTogether = false })
                         showEqualizer -> ({ showEqualizer = false })
+                        showTransfer -> ({ showTransfer = false })
                         settingsSubScreen != null -> ({ settingsSubScreen = null })
                         showSettings -> ({ showSettings = false })
                         showReplay -> ({ showReplay = false })
@@ -3501,7 +3544,7 @@ private fun BitChordApp(
                     accessory = if (
                         selectedTab == TAB_SEARCH && detail == null && selectedMoodGenre == null &&
                         libraryShowAll == null && !showSettings && !showAccountScrobbling &&
-                        !showSources && !showListenTogether && !showEqualizer && !showDiscord &&
+                        !showSources && !showListenTogether && !showEqualizer && !showTransfer && !showDiscord &&
                         !showHistory && !showReplay
                     ) {
                         {
@@ -3593,7 +3636,7 @@ private fun BitChordApp(
                         }
                         // Only worth surfacing where there's room for it and it won't
                         // be mistaken for a per-page action — Home, at rest.
-                        if (!showSettings && !showAccountScrobbling && !showSources && !showListenTogether && !showEqualizer &&
+                        if (!showSettings && !showAccountScrobbling && !showSources && !showListenTogether && !showEqualizer && !showTransfer &&
                             detail == null && selectedTab == TAB_HOME
                         ) {
                             updateNotice?.let { update ->
@@ -3753,6 +3796,7 @@ private fun BitChordApp(
                     showSources = false
                     showListenTogether = false
                     showEqualizer = false
+                    showTransfer = false
                     showReplay = false
                     settingsSubScreen = null
                     showHistory = false

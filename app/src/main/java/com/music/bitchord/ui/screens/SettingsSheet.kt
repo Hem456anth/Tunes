@@ -67,6 +67,7 @@ import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.SurroundSound
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.VolumeUp
@@ -176,6 +177,7 @@ fun SettingsScreen(
     onTranslationLanguage: () -> Unit,
     onSources: () -> Unit,
     onListenTogether: () -> Unit,
+    onMusicTransfer: () -> Unit,
     onSpotifyCanvasAuth: () -> Unit,
     onAppLanguage: () -> Unit,
     contentPadding: PaddingValues,
@@ -416,6 +418,23 @@ fun SettingsScreen(
                     } ?: stringResource(R.string.listen_together_subtitle),
                     badge = party.members.size.takeIf { party.inParty && it > 1 }?.toString(),
                     onClick = onListenTogether,
+                )
+            }
+            // Beside the account because what it writes into is the account's
+            // library (or this phone's playlists when signed out).
+            val transferTitle = stringResource(R.string.music_transfer)
+            val transferJob by com.music.bitchord.data.transfer.TransferEngine.job.collectAsStateWithLifecycle()
+            row(transferTitle, "import", "spotify", "deezer", "apple music", "tunemymusic", "songshift", "playlists", "move") {
+                SettingsRow(
+                    icon = Icons.Rounded.SwapHoriz,
+                    title = transferTitle,
+                    subtitle = when (transferJob?.state) {
+                        com.music.bitchord.data.transfer.JobState.RUNNING ->
+                            stringResource(R.string.transfer_running_subtitle, ((transferJob?.fraction ?: 0f) * 100).toInt())
+                        com.music.bitchord.data.transfer.JobState.PAUSED -> stringResource(R.string.transfer_paused_subtitle)
+                        else -> stringResource(R.string.music_transfer_subtitle)
+                    },
+                    onClick = onMusicTransfer,
                 )
             }
         }
