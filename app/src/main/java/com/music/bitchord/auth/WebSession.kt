@@ -49,7 +49,7 @@ data class CapturedSession(
  * The WebView's own cookie jar, which is not the app's.
  *
  * These are separate stores and the difference is invisible until it bites:
- * signing out of BitChord forgets the cookie the app makes requests with, and
+ * signing out of Tunes forgets the cookie the app makes requests with, and
  * leaves the browser's copy untouched. The next sign-in then loads
  * accounts.google.com, is recognised immediately, redirects straight through
  * to music.youtube.com and hands back a cookie for the account that was just

@@ -692,7 +692,7 @@ private fun drawRuns(
 }
 
 /**
- * The BitChord mark, baseline-aligned with the word beside it.
+ * The Tunes mark, baseline-aligned with the word beside it.
  *
  * The same vector the app draws everywhere, tinted and given bounds rather than
  * rasterised to a PNG first — a vector drawable renders into an ordinary canvas
@@ -784,7 +784,7 @@ private const val CARD_ROWS = 5
 private const val COLUMN_GAP = 36f
 private const val ROW_HEIGHT = 116f
 private const val ART = 84f
-private const val ACCENT = 0xFF0A60FF.toInt() // Tunes blue (was BitChord red)
+private const val ACCENT = 0xFF0A60FF.toInt() // Tunes blue (was red)
 
 private const val POSTER_ROWS = 5
 private const val POSTER_ALBUMS = 3

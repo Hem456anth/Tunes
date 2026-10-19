@@ -127,7 +127,7 @@ object JioSaavnService {
         explicitNulls = false
     }
 
-    // Note: BitChord uses OkHttp engine for ktor
+    // Note: Tunes uses OkHttp engine for ktor
     private val client by lazy {
         HttpClient(OkHttp) {
             install(ContentNegotiation) { json(json) }

@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.R
 
-// Tunes blue (the logomark's #1388FF → #0652FF). Replaces BitChord's red in the
+// Tunes blue (the logomark's #1388FF → #0652FF). Replaces the old red in the
 // spots that want one fixed accent regardless of theme (Replay's rank badge).
 // White text on it is 5.1:1.
 val AccentBlue = Color(0xFF0A60FF)
@@ -58,7 +58,7 @@ private val LightColors = lightColorScheme(
 
 /**
  * Inter (SIL Open Font License), static instances of each weight the scale uses.
- * BitChord bundled Apple's SF Pro Display, whose licence doesn't allow
+ * Earlier versions bundled Apple's SF Pro Display, whose licence doesn't allow
  * redistribution in another app; Inter is the closest open design.
  */
 val SFProDisplay = FontFamily(

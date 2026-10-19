@@ -1,6 +1,6 @@
 # Contributing to Tunes
 
-Thank you for contributing to Tunes. Changes that belong in the shared BitChord code are often better sent upstream to [BitChord](https://github.com/kushagrasinghx/BitChord). Follow these guidelines to ensure an efficient development and review process.
+Thank you for contributing to Tunes. Follow these guidelines to ensure an efficient development and review process.
 
 ## Proposing Contributions
 - Substantial features, refactors, or UI redesigns should normally be discussed before implementation. Open an issue on GitHub to outline your proposal.
@@ -71,6 +71,6 @@ Distinguish clearly between source metadata, decoder format, internal DSP format
 All pull requests require review and approval by repository maintainers before merging. Maintainers review changes for correctness, architecture fit, and maintainability.
 
 ## Dependencies and Licensing
-Tunes, like BitChord, is licensed under the **GNU General Public License v3.0 (GPLv3)**.
+Tunes is licensed under the **GNU General Public License v3.0 (GPLv3)**.
 
 All contributed code and dependencies must be strictly compatible with GPLv3. Avoid introducing external dependencies unless strictly necessary; any new dependency must be evaluated for necessity, binary size, and license compliance.

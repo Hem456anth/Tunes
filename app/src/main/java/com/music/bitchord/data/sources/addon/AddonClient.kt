@@ -219,7 +219,7 @@ class AddonClient(rawBaseUrl: String) {
      *
      * Without it an addon holding an Atmos mix has no way to know it may serve
      * one, so it takes its default branch and sends stereo. That is the whole
-     * of why BitChord never heard Atmos from an addon: not a detection bug —
+     * of why Tunes never heard Atmos from an addon: not a detection bug —
      * [AddonStream.isDolbyAtmos] reads every spelling an addon sends — but a
      * question that was never asked.
      *
@@ -395,7 +395,7 @@ class AddonClient(rawBaseUrl: String) {
 
         private const val QUALITY_KEY = "quality"
 
-        /** The spec's immersive-audio hint, and the only value BitChord ever sends for it. */
+        /** The spec's immersive-audio hint, and the only value Tunes ever sends for it. */
         private const val ATMOS_KEY = "atmos"
         private const val ATMOS_AUTO = "auto"
 

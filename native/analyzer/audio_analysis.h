@@ -3,7 +3,7 @@
  * analyzer this file is adapted from almost unchanged: the mix-out budget,
  * phrase detection and cue scoring below were tuned against real material,
  * and reimplementing them from a description would produce different numbers
- * that BitChord's transition policy is not calibrated for.
+ * that Tunes' transition policy is not calibrated for.
  *
  * Copyright (C) 2026 SFG545 (original Orchard implementation)
  * Copyright (C) 2026 Kushagra Singh (BitChord adaptation)

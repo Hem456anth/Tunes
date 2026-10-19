@@ -39,7 +39,7 @@ the music keeps going.
 Change keys at `chrome://extensions/shortcuts`.
 
 ## Android app
-Tunes for Android is a separate app in this repository (a fork of BitChord). Download the APK from
+Tunes for Android is a separate app in this repository. Download the APK from
 [Releases](https://github.com/Hem456anth/Tunes/releases/latest); see the main [README](../README.md).
 Continue on Phone links from this extension open in Tunes for Android 3.1.0 or newer at the same second.
 
@@ -70,7 +70,7 @@ src/sidepanel/           React UI
 ### 1.3.0
 - Podcasts (Library → Podcasts, Explore, and a Podcasts chip in Search): top shows in India and search through Apple Podcasts and fyyd, any RSS feed or website address, follow shows, latest episodes, resume where you stopped, 0.75–2× speed, back 15 s and forward 30 s (media keys too), mark played, OPML import and export. Feeds are parsed in Tunes, following AntennaPod's rules (GPL-3.0); episode de-duplication and site-to-feed discovery are ported from Winds (BSD-3-Clause, © 2018 Stream.io Inc). Chrome asks once for permission to read podcast feeds.
 - Don't Play This Song and Block Artist: autoplay, radio and the queue skip them; Settings → Blocked songs and artists to undo.
-- Lyrics: Original, Romanized or Translated (choose the language in Settings), ported from BitChord's lyric translation.
+- Lyrics: Original, Romanized or Translated (choose the language in Settings), ported from the Android app's lyric translation.
 - Gapless playback: the next song is loaded early and starts the moment the current one ends (when crossfade is off).
 - Smarter autoplay: no songs you just heard, no duplicate uploads of the same song, never three in a row by one artist, blended with the song before.
 - A short welcome on first run.
@@ -88,7 +88,5 @@ src/sidepanel/           React UI
 - Unit tests and CI.
 
 ## License and credits
-GPL-3.0 (see LICENSE). Tunes adapts ideas and code from the GPL-3.0
-[BitChord](https://github.com/kushagrasinghx/BitChord) project. It isn't affiliated with YouTube,
-Google, Apple or Spotify.
-Third-party notices (Winds, BSD-3-Clause; AntennaPod; data sources) are in THIRD_PARTY_NOTICES.md and ship inside the extension.
+GPL-3.0 (see LICENSE). Tunes isn't affiliated with YouTube, Google, Apple or Spotify.
+Third-party notices (Winds, BSD-3-Clause; AntennaPod; GPL-3.0 lyric translation code; data sources) are in THIRD_PARTY_NOTICES.md and ship inside the extension.

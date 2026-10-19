@@ -4,18 +4,16 @@
 
 # Tunes
 
-### A YouTube Music player for Android and Chrome, built from BitChord
+### A YouTube Music player for Android and Chrome
 
 [![Latest release](https://img.shields.io/github/v/release/Hem456anth/Tunes?style=for-the-badge&labelColor=0d1117)](https://github.com/Hem456anth/Tunes/releases/latest)
 [![License](https://img.shields.io/github/license/Hem456anth/Tunes?style=for-the-badge&labelColor=0d1117)](LICENSE)
 
 </div>
 
-Tunes is a fork of [BitChord](https://github.com/kushagrasinghx/BitChord) by Kushagra Singh,
-released under the GNU General Public License v3.0. Tunes stays under GPL-3.0; see `LICENSE`.
-The Android app is based on BitChord **v1.8** and keeps every BitChord feature: playback,
-downloads, Automix, lyrics, Replay, widgets, Android Auto, scrobbling, Discord, local files,
-Spotify, Chromecast and sign-in. The repository also holds **Tunes for Chrome**, a side-panel
+Tunes is free software under the GNU General Public License v3.0; see `LICENSE`.
+The Android app covers playback, downloads, Automix, lyrics, Replay, widgets, Android Auto,
+scrobbling, Discord, local files, Spotify, Chromecast and sign-in. The repository also holds **Tunes for Chrome**, a side-panel
 player extension (see [`extension/`](extension/README.md)).
 
 ## Download
@@ -43,9 +41,9 @@ player extension (see [`extension/`](extension/README.md)).
 - Everything else from 3.1.0 is unchanged.
 
 ### 3.1.0 (18 Oct 2026)
-- Now based on BitChord **v1.8**: Spotify playlists and Liked Songs, Chromecast, built-in
-  equalizer, lyric translation and romanization, Listen Together, SMB/WebDAV libraries, playlist
-  reorder, the redesigned queue and artist pages, and the rest of v1.6–v1.8.
+- Spotify playlists and Liked Songs, Chromecast, built-in equalizer, lyric translation and
+  romanization, Listen Together, SMB/WebDAV libraries, playlist reorder, and redesigned queue and
+  artist pages.
 - Continue from Tunes for Chrome: a YouTube Music link with `t=` (the extension's Continue on
   Phone QR code) opens the song at that second. Sharing from the player adds the position, so the
   extension can continue it too.
@@ -53,14 +51,14 @@ player extension (see [`extension/`](extension/README.md)).
   redistributed).
 
 ### 3.0.0 (17 Oct 2026)
-- First Tunes release, based on BitChord v1.5.1.
+- First Tunes release.
 
-## What Tunes changes (relative to BitChord)
+## Highlights
 
 - **Identity:** package `app.tunes.music` (dev flavor `app.tunes.music.dev`),
   name "Tunes", version 3.1.2 (versionCode 6), blue logomark and launcher icon. Installs
-  beside BitChord and over every earlier Tunes release (same signing key). Internal Kotlin
-  package names stay `com.music.bitchord` to keep the fork easy to rebase.
+  over every earlier Tunes release (same signing key). Internal Kotlin package names are
+  unchanged.
 - **Blue instead of red:** every red button and accent (delete, sign out, remove
   source, download retry, Replay badges and poster, launcher gradient, logo SVG)
   is now blue: `ActionBlue` (#4A94FF on dark, #005BD3 on light, both ≥4.5:1)
@@ -73,15 +71,13 @@ player extension (see [`extension/`](extension/README.md)).
   tokens can't be restored onto another device. The Spotify token WebView, which
   carries a JavaScript bridge, can no longer navigate off `*.spotify.com`.
 - **Updates and links:** the in-app update checker reads
-  `github.com/Hem456anth/tunes` releases (it no longer offers BitChord APKs).
-  User agents, Discord "Visit" button, folders (`Music/Tunes`, `Pictures/Tunes`),
-  file names and notifications say Tunes. Settings → About credits BitChord and
-  links its repository and developer. BitChord backups still import.
-- **Explore and Search:** kept as in Tunes 3.0 (BitChord v1.5.1): the sectioned mood grid, text-only
+  `github.com/Hem456anth/tunes` releases. Folders (`Music/Tunes`, `Pictures/Tunes`),
+  file names and notifications say Tunes. Older backups still import.
+- **Explore and Search:** kept as in Tunes 3.0: the sectioned mood grid, text-only
   suggestions and typed recent searches, instead of the v1.8 redesign.
 - **Build:** `TUNES_PREBUILT_NATIVE_DIR` lets hosts without an NDK package
-  prebuilt copies of `libbitchord_analysis.so` (built from `native/` and
-  `app/src/main/cpp/` in this repo, unchanged) instead of compiling them.
+  prebuilt native libraries (built from `native/` and `app/src/main/cpp/` in this repo)
+  instead of compiling them.
 
 ## Build
 
@@ -128,8 +124,6 @@ Issues and pull requests are welcome. Please read the [Contributing Guide](CONTR
 
 ## Credits
 
-- **[BitChord](https://github.com/kushagrasinghx/BitChord)** by Kushagra Singh: Tunes for Android is
-  built on its code. If you like Tunes, consider [supporting BitChord](https://ko-fi.com/kushagrasinghx).
 - Lyrics animation inspired by [binimum/am-lyrics](https://github.com/binimum/am-lyrics). Lyrics
   providers: [lrc.red](https://lrc.red), [BiniLyrics](https://github.com/binimum),
   [BetterLyrics](https://github.com/better-lyrics/better-lyrics), [PaxSenix](https://lyrics.paxsenix.org),
@@ -153,4 +147,5 @@ Issues and pull requests are welcome. Please read the [Contributing Guide](CONTR
 
 ## License
 
-GNU General Public License v3.0. See [LICENSE](LICENSE).
+GNU General Public License v3.0. See [LICENSE](LICENSE). The copyright notices of the original
+authors are kept in the source files, as the license requires.

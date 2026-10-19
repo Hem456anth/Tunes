@@ -2,7 +2,7 @@
  * Modeled on Orchard's own AudioDecoder (https://github.com/SFG5453/Orchard),
  * scoped down to the platform MediaCodec path — Orchard prefers a native
  * libopus decode with the platform decoder as its documented fallback; this
- * only needs the fallback, since BitChord has no reason to carry a second
+ * only needs the fallback, since Tunes has no reason to carry a second
  * Opus decoder purely for background analysis.
  *
  * Copyright (C) 2026 Kushagra Singh

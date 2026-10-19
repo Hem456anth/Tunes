@@ -1062,7 +1062,7 @@ object Downloads {
         val mimeType: String,
         /** For the log line, so a download's provenance is on the record. */
         val describe: String,
-        /** Short premium-rendition badge shown only in BitChord's Downloads list. */
+        /** Short premium-rendition badge shown only in Tunes' Downloads list. */
         val downloadFormat: String? = null,
         val taggable: Boolean = true,
         val offlineHls: Manifest? = null,
@@ -1361,7 +1361,7 @@ internal fun resolvedDownloadDates(
     return (persistedAddedSeconds ?: modifiedSeconds) to modifiedSeconds
 }
 
-/** Premium source labels used in BitChord's Downloads list. */
+/** Premium source labels used in Tunes' Downloads list. */
 private fun StreamFormat.downloadBadge(): String? = when {
     isDolbyAtmos -> "DOLBY"
     codec.equals("flac", ignoreCase = true) || codec.equals("x-flac", ignoreCase = true) -> "FLAC"

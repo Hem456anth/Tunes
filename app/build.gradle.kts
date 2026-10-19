@@ -75,13 +75,13 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        // Tunes is its own app: a new package, so it installs beside BitChord.
+        // Tunes is its own app with its own package name.
         applicationId = "app.tunes.music"
         // 26 keeps reach wide; real-time blur (RenderEffect) kicks in on API 31+,
         // Haze falls back to a translucent scrim below that.
         minSdk = 26
         targetSdk = 36
-        // Tunes 3.1.0 = BitChord v1.8 + Tunes changes. 4 > 3 (Tunes 3.0.x), same signing key.
+        // versionCode only ever goes up (4 was Tunes 3.1.0, 3 was 3.0.x); same signing key.
         versionCode = 6
         versionName = "3.1.2"
 

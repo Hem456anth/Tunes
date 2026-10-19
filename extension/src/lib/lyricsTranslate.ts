@@ -1,5 +1,5 @@
-// Lyric translation and romanization, ported from BitChord's
-// LyricsTranslation.kt (GPL-3.0, github.com/kushagrasinghx/BitChord): lines are
+// Lyric translation and romanization, ported from the Android app's
+// LyricsTranslation.kt (GPL-3.0): lines are
 // batched into a few requests to Google Translate's web endpoint, separated by
 // private-use markers so the answer splits back into the same lines.
 import { fetchWithTimeout } from './net';
@@ -56,7 +56,7 @@ async function run(lines: string[], target: string, mode: 'translate' | 'romaniz
   if (!bs.length) throw new Error('No lyrics to translate');
   const out: (string | null)[] = lines.map(() => null);
   const weights = new Map<string, number>();
-  // Two requests at a time, like BitChord: fast for long songs, light on the network.
+  // Two requests at a time, like the Android app: fast for long songs, light on the network.
   for (let i = 0; i < bs.length; i += 2) {
     const answers = await Promise.all(bs.slice(i, i + 2).map(async (b) => {
       const a = parseAnswer(await ask(b.payload, target, mode === 'translate' ? 't' : 'rm'), mode === 'translate' ? 0 : 3, b.idx.length);
