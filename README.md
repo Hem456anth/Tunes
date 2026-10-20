@@ -16,6 +16,17 @@ The Android app covers playback, downloads, Automix, lyrics, Replay, widgets, An
 scrobbling, Discord, local files, Spotify, Chromecast, Music Transfer and sign-in. The repository also holds **Tunes for Chrome**, a side-panel
 player extension (see [`extension/`](extension/README.md)).
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/android-listen-now.jpg" alt="Tunes for Android: Listen Now" width="49%" />
+  <img src="docs/screenshots/android-lyrics.jpg" alt="Tunes for Android: word-synced lyrics" width="49%" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/extension-listen-now.jpg" alt="Tunes for Chrome: side-panel player" width="49%" />
+  <img src="docs/screenshots/extension-continue-on-phone.jpg" alt="Tunes for Chrome: Continue on Phone QR code" width="49%" />
+</p>
+
 ## Download
 
 - **Android:** get `Tunes-<version>-arm64.apk` from the
