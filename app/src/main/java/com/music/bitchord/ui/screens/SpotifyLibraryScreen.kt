@@ -273,6 +273,10 @@ fun clearSpotifyWebSession() {
     cookies.flush()
 }
 
+/**
+ * Spotify's own login page in a WebView. Internal so Music Transfer can connect an
+ * account with the same flow; Tunes only keeps the session cookie Spotify sets.
+ */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 internal fun SpotifyLogin(

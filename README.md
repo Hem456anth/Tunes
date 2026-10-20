@@ -13,7 +13,7 @@
 
 Tunes is free software under the GNU General Public License v3.0; see `LICENSE`.
 The Android app covers playback, downloads, Automix, lyrics, Replay, widgets, Android Auto,
-scrobbling, Discord, local files, Spotify, Chromecast and sign-in. The repository also holds **Tunes for Chrome**, a side-panel
+scrobbling, Discord, local files, Spotify, Chromecast, Music Transfer and sign-in. The repository also holds **Tunes for Chrome**, a side-panel
 player extension (see [`extension/`](extension/README.md)).
 
 ## Download
@@ -61,7 +61,7 @@ player extension (see [`extension/`](extension/README.md)).
 ## Highlights
 
 - **Identity:** package `app.tunes.music` (dev flavor `app.tunes.music.dev`),
-  name "Tunes", version 3.1.2 (versionCode 6), blue logomark and launcher icon. Installs
+  name "Tunes", version 3.1.2 (versionCode 7), blue logomark and launcher icon. Installs
   over every earlier Tunes release (same signing key). Internal Kotlin package names are
   unchanged.
 - **Blue instead of red:** every red button and accent (delete, sign out, remove
@@ -78,6 +78,11 @@ player extension (see [`extension/`](extension/README.md)).
 - **Updates and links:** the in-app update checker reads
   `github.com/Hem456anth/tunes` releases. Folders (`Music/Tunes`, `Pictures/Tunes`),
   file names and notifications say Tunes. Older backups still import.
+- **Music Transfer:** a Settings screen that moves liked songs, playlists, albums and artists
+  from Spotify, Deezer, Apple Music, YouTube links and CSV/TXT/M3U exports into YouTube Music
+  or on-device playlists. It uses only public pages, public APIs and the user's own sign-ins.
+  TuneMyMusic and SongShift are links only, since neither has a public API. Details in
+  [docs/music-transfer.md](docs/music-transfer.md).
 - **Explore and Search:** kept as in Tunes 3.0: the sectioned mood grid, text-only
   suggestions and typed recent searches, instead of the v1.8 redesign.
 - **Build:** `TUNES_PREBUILT_NATIVE_DIR` lets hosts without an NDK package
@@ -110,6 +115,14 @@ Optional `local.properties` keys: `LASTFM_API_KEY`, `LASTFM_SECRET`,
 - **Animated album canvas** and artwork-driven colors, with a blue Tunes accent.
 - **Frosted-glass bars** and Material 3 design.
 
+#### Music Transfer
+- **Bring your library over** from Spotify (sign in on Spotify's own page), Deezer and Apple Music
+  links, YouTube playlists, or a CSV, TXT or M3U file from TuneMyMusic, Soundiiz or Exportify.
+- **Send it to YouTube Music** (likes, playlists, saved albums, followed artists) or to playlists
+  on your phone.
+- **Live progress, pause and resume**, duplicate skipping, same-name playlist merging, automatic
+  retries, and a **Find** button for songs that weren't matched.
+
 #### Accounts and controls
 - **Google sign-in** for your YouTube Music library, **Spotify** playlists and Liked Songs.
 - **Scrobbling** to Last.fm and ListenBrainz, **Discord** Rich Presence and **Listen Together**.
@@ -140,7 +153,7 @@ Issues and pull requests are welcome. Please read the [Contributing Guide](CONTR
 ## Disclaimer
 
 > [!IMPORTANT]
-> Tunes is not affiliated with, endorsed by, or connected to YouTube, Google, Spotify or Apple.
+> Tunes is not affiliated with, endorsed by, or connected to YouTube, Google, Spotify, Apple, Deezer, TuneMyMusic or SongShift.
 
 - **No media hosting:** Tunes doesn't host, upload or store copyrighted music. It plays files on
   your device or streams from public or signed-in services.

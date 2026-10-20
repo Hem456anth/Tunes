@@ -554,6 +554,7 @@ private fun BitChordApp(
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showListenTogether by rememberSaveable { mutableStateOf(false) }
     var showEqualizer by rememberSaveable { mutableStateOf(false) }
+    // Settings → Music Transfer, handled like the equaliser: a sub-screen over Settings.
     var showTransfer by rememberSaveable { mutableStateOf(false) }
     var showSpotifyCanvasAuth by remember { mutableStateOf(false) }
 
@@ -3380,6 +3381,8 @@ private fun BitChordApp(
                             EqualizerScreen(contentPadding = listPadding)
                         }
                     }
+                    // Music Transfer keeps its own job state in TransferEngine, so closing
+                    // this overlay mid-transfer doesn't stop it.
                     "music_transfer" -> {
                         Surface(
                             modifier = Modifier.fillMaxSize(),
