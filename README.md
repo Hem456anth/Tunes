@@ -142,7 +142,6 @@ Issues and pull requests are welcome. Please read the [Contributing Guide](CONTR
 
 ## Credits
 
-- Tunes is a fork of **[BitChord](https://github.com/kushagrasinghx/BitChord)** by [@kushagrasinghx](https://github.com/kushagrasinghx), used under GPL-3.0. The core player and most features come from BitChord; Tunes adds its own branding, Music Transfer, the Chrome extension and the changes listed above. Please support the original project.
 - Lyrics animation inspired by [binimum/am-lyrics](https://github.com/binimum/am-lyrics). Lyrics
   providers: [lrc.red](https://lrc.red), [BiniLyrics](https://github.com/binimum),
   [BetterLyrics](https://github.com/better-lyrics/better-lyrics), [PaxSenix](https://lyrics.paxsenix.org),
