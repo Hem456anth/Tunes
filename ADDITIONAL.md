@@ -8,5 +8,6 @@ Additional Tunes project and development information.
 - [Tunes for Chrome](extension/README.md): the side-panel extension, its features and how to build it.
 
 ## Development
+Start with [CLAUDE.md](CLAUDE.md) (handoff and rules), [SETUP.md](SETUP.md), [ARCHITECTURE.md](ARCHITECTURE.md) and [TASKS.md](TASKS.md).
 See [CONTRIBUTING.md](CONTRIBUTING.md) for tools and build commands.
 

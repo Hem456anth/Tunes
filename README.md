@@ -108,8 +108,9 @@ player extension (see [`extension/`](extension/README.md)).
 ./gradlew :app:testProdReleaseUnitTest
 ```
 
-Optional `local.properties` keys: `LASTFM_API_KEY`, `LASTFM_SECRET`,
-`MODULE_INDEX_URL` (unset: Last.fm sign-in and HQ modules stay off, as upstream).
+Optional `local.properties` keys: `LASTFM_API_KEY` and `LASTFM_SECRET` (unset: Last.fm sign-in
+stays off), and `LISTEN_TOGETHER_SERVER` (the party server's default address). Full setup is in
+[SETUP.md](SETUP.md).
 
 ## Features
 
@@ -144,6 +145,17 @@ Optional `local.properties` keys: `LASTFM_API_KEY`, `LASTFM_SECRET`,
 A side-panel music player for Chrome lives in [`extension/`](extension/README.md): Listen Now,
 Explore, Library and Search, synced lyrics, podcasts, playlists, and Continue on Phone to hand a
 song to the Android app.
+
+## Documentation
+
+| | |
+|---|---|
+| [SETUP.md](SETUP.md) | Build, test, debug and release |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | How the Android app, the extension and the server fit together |
+| [FEATURES.md](FEATURES.md) · [ROADMAP.md](ROADMAP.md) · [TASKS.md](TASKS.md) | What exists, what's next, known bugs |
+| [API.md](API.md) · [DATABASE.md](DATABASE.md) | Network integrations and on-device storage |
+| [DECISIONS.md](DECISIONS.md) · [CHANGELOG.md](CHANGELOG.md) | Why things are the way they are, and history |
+| [CLAUDE.md](CLAUDE.md) · [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Handoff for AI coding agents and new maintainers |
 
 ## Contributing
 

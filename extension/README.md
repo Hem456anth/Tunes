@@ -21,8 +21,8 @@ the music keeps going.
   YouTube's ads.
 
 ## Install (developer mode)
-1. Download the latest `tunes.zip` from Releases and unzip it, or build it yourself:
-   `npm install && npm run build`, then use `dist/`.
+1. Build it: `npm install && npm run build`, then use `dist/`. (No `tunes.zip` is attached to
+   GitHub Releases yet.)
 2. Open `chrome://extensions` and turn on **Developer mode**.
 3. Click **Load unpacked** and pick the folder.
 4. Pin Tunes and click it (or press **Alt+M**) to open the side panel.

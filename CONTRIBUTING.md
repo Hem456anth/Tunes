@@ -25,7 +25,7 @@ The project requires the following tools:
 - **Android SDK**: `compileSdk = 37`, `targetSdk = 36`, `minSdk = 26`.
 - **C/C++ NDK & CMake**: CMake 3.22.1+ and Android NDK (for native audio DSP components configured under `app/src/main/cpp`).
 - **Chrome extension (Optional)**: Node.js 22 for `extension/` (`npm ci && npm test && npm run build`).
-- **Listen Together Backend (Optional)**: Go 1.22+ if developing or testing the party server (`backend/`).
+- **Listen Together Backend (Optional)**: Go (the version in `backend/go.mod`) if developing or testing the party server (`backend/`).
 
 ## Build and Test Commands
 Run Gradle commands from the repository root.
@@ -54,6 +54,35 @@ Run a specific test:
 ```bash
 ./gradlew testDevDebugUnitTest --tests "com.music.bitchord.playback.audio.DirectAudioStreamingRegressionTest"
 ```
+
+## Architecture Rules (Tunes)
+Read [CLAUDE.md](CLAUDE.md) and [DECISIONS.md](DECISIONS.md) before changing behavior. In short:
+- Never block, skip or mute YouTube ads.
+- Don't rename the `com.music.bitchord` package, identifiers, prefs or store names, log tags or
+  native libraries. Only docs and comments use the Tunes name.
+- Keep license and copyright notices verbatim.
+- Keep the 3.0 Explore and Search screens on Android.
+- The extension never opens tabs for playback. Every new `UiCommand` must be added to
+  `validCommand()` in `extension/src/background/index.ts`.
+- Never commit `keystore.properties`, `*.jks` or `local.properties`. Releases use the one Tunes
+  signing key.
+
+## Extension and Backend Checks
+```bash
+cd extension && npx tsc --noEmit -p . --noUnusedLocals && npm test && npm run build
+cd backend && go test ./...
+```
+Extension code: TypeScript strict, React function components, no new runtime dependencies without
+a reason. Match the existing compact style. Add a `node:test` case in `extension/test/` for new
+logic.
+
+## Commits and Docs
+- Use one focused commit per change, with a message that says what changed for the user
+  (e.g. "Tunes 3.1.2 for Android: closing Tunes from Recent Apps stops playback").
+- Run `git pull --rebase` before you push.
+- In the same change, update [CHANGELOG.md](CHANGELOG.md), [FEATURES.md](FEATURES.md) and
+  [TASKS.md](TASKS.md), and the README "What's new" section for user-visible changes. Setup
+  details are in [SETUP.md](SETUP.md).
 
 ## Code Quality
 - Follow idiomatic Kotlin and Jetpack Compose conventions.
