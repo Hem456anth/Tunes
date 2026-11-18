@@ -36,9 +36,14 @@ import kotlin.math.exp
  * ## The limiter
  *
  * Only engages when a positive normalization gain could push a track past
- * full scale. Instant attack, a smooth release, no lookahead — a peak
- * catcher for the odd over, not a mastering limiter, and never asked to do
- * more than that.
+ * full scale, or while [holdLimiter] says an earlier stage — the equaliser,
+ * whose make-up only takes back half of a boost — could have. Instant attack,
+ * a smooth release, no lookahead — a peak catcher for the odd over, not a
+ * mastering limiter, and never asked to do more than that.
+ *
+ * It is here rather than in the equaliser because this is the last stage:
+ * an EQ boost that normalization then turns down was never an over, and
+ * limiting it on the way through would have squashed it for nothing.
  *
  * ## Blend trim
  *
@@ -69,6 +74,13 @@ class LoudnessProcessor {
 
     @Volatile
     private var trimTarget = 1f
+
+    /**
+     * Keeps the limiter running even with no gain of this stage's own to
+     * apply. Set by [com.music.bitchord.playback.audio.DspChain] before every
+     * block, on the audio thread, from whether the equaliser is shaping it.
+     */
+    var holdLimiter = false
 
     private var sampleRate = 0
     private var channelCount = 0
@@ -136,8 +148,14 @@ class LoudnessProcessor {
         // Parked: nothing to scale and nothing that could clip. Returning before
         // touching a sample keeps the chain bit-exact while normalization is off
         // or the track happens to need no correction.
-        if (targetGain == 1f && targetTrim >= 1f &&
-            abs(currentGain - 1f) < SETTLED && currentTrim >= 1f - SETTLED && reduction >= 1f - SETTLED
+        //
+        // The limiter only has to have *mostly* let go, not all the way: a
+        // master that itself peaks a hair past the ceiling would otherwise hold
+        // it a fraction under unity for the rest of the track, and the chain
+        // would never be bit-exact again after the EQ or normalization was
+        // switched off.
+        if (!holdLimiter && targetGain == 1f && targetTrim >= 1f &&
+            abs(currentGain - 1f) < SETTLED && currentTrim >= 1f - SETTLED && reduction >= PARK_REDUCTION
         ) {
             currentGain = 1f
             currentTrim = 1f
@@ -192,5 +210,8 @@ class LoudnessProcessor {
         private const val RELEASE_SECONDS = 0.08
 
         private const val SETTLED = 1e-4f
+
+        /** Little enough reduction left (about 0.25 dB) to drop it outright when parking. */
+        private const val PARK_REDUCTION = 0.97f
     }
 }

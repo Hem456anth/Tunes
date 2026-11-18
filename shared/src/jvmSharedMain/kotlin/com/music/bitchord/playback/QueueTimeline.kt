@@ -24,6 +24,18 @@ data class ContextQueueResult(
 )
 
 /**
+ * Plan for executing a queue jump, indicating whether the operation is a pure seek,
+ * the index permutation of original timeline items to keep/reorder, the new target index,
+ * and whether the target track should be promoted to [QueueTier.CONTEXT].
+ */
+data class JumpOrderPlan(
+    val isPureSeek: Boolean,
+    val newOrderIndices: List<Int>,
+    val newTargetIndex: Int,
+    val promoteTargetToContext: Boolean = false,
+)
+
+/**
  * The three-tier queue's rules, as plain list edits.
  *
  * Shared because the phone and the desktop used to run two queues that only
@@ -144,58 +156,102 @@ object QueueTimeline {
     }
 
     /**
-     * Reconstructs the upcoming queue when a listener taps an item in the queue.
+     * Computes the jump plan and index permutation for tapping a track at [targetIndex].
      *
      * Invariants:
-     * 1. If [targetIndex] <= [currentIndex] or either index is out of bounds, returns `null`
-     *    (a backward jump or the active track, handled as a plain seek).
-     * 2. [QueueTier.AUTOPLAY]: The tapped track becomes the active track promoted to [QueueTier.CONTEXT]
-     *    (starting a fresh station). All future [QueueTier.USER_QUEUE] items are preserved immediately
-     *    after it, then the AutoPlay items after it. Old context and bypassed AutoPlay are discarded.
-     * 3. [QueueTier.CONTEXT]: The tapped track becomes active. All future [QueueTier.USER_QUEUE] items
-     *    are preserved immediately after it. Context items strictly after [targetIndex] follow the user
-     *    queue, then the AutoPlay items after it. Bypassed context items are discarded.
-     * 4. [QueueTier.USER_QUEUE]: User queue items between [currentIndex] + 1 and [targetIndex] were
-     *    bypassed within the manual queue and are consumed. Later user queue items, along with all
-     *    future context and AutoPlay tracks, are preserved.
+     * 1. Backward or same track ([targetIndex] <= [currentIndex]): pure seek.
+     * 2. [QueueTier.CONTEXT]:
+     *    - If no [QueueTier.USER_QUEUE] items were crossed: pure seek preserving timeline and all following items.
+     *    - If [QueueTier.USER_QUEUE] items were crossed (Option B): all unplayed [QueueTier.USER_QUEUE] items
+     *      are pinned contiguously immediately after target; preceding context items remain in history.
+     * 3. [QueueTier.USER_QUEUE]: Bypassed manual queue items are pruned; subsequent user queue and context follow.
+     * 4. [QueueTier.AUTOPLAY]: Target is promoted to [QueueTier.CONTEXT] (station pivot); future user queue is
+     *    preserved behind it; old context and bypassed autoplay are dropped.
+     */
+    fun computeJumpOrder(
+        tiers: List<QueueTier>,
+        currentIndex: Int,
+        targetIndex: Int,
+    ): JumpOrderPlan? {
+        if (currentIndex !in tiers.indices || targetIndex !in tiers.indices) return null
+        if (targetIndex <= currentIndex) {
+            return JumpOrderPlan(
+                isPureSeek = true,
+                newOrderIndices = tiers.indices.toList(),
+                newTargetIndex = targetIndex,
+            )
+        }
+
+        val targetTier = tiers[targetIndex]
+        return when (targetTier) {
+            QueueTier.CONTEXT -> {
+                val crossedUserQueue = (currentIndex + 1 until targetIndex).filter { tiers[it] == QueueTier.USER_QUEUE }
+                if (crossedUserQueue.isEmpty()) {
+                    JumpOrderPlan(
+                        isPureSeek = true,
+                        newOrderIndices = tiers.indices.toList(),
+                        newTargetIndex = targetIndex,
+                    )
+                } else {
+                    val precedingHistory = (0..currentIndex).toList()
+                    val bypassedContext = (currentIndex + 1 until targetIndex).filter { tiers[it] == QueueTier.CONTEXT }
+                    val target = listOf(targetIndex)
+                    val followingUserQueue = (targetIndex + 1 until tiers.size).filter { tiers[it] == QueueTier.USER_QUEUE }
+                    val allUpcomingUserQueue = crossedUserQueue + followingUserQueue
+                    val followingContext = (targetIndex + 1 until tiers.size).filter { tiers[it] == QueueTier.CONTEXT }
+                    val followingAutoplay = (targetIndex + 1 until tiers.size).filter { tiers[it] == QueueTier.AUTOPLAY }
+
+                    val order = precedingHistory + bypassedContext + target + allUpcomingUserQueue + followingContext + followingAutoplay
+                    val newTarget = precedingHistory.size + bypassedContext.size
+                    JumpOrderPlan(isPureSeek = false, newOrderIndices = order, newTargetIndex = newTarget)
+                }
+            }
+            QueueTier.USER_QUEUE -> {
+                val history = (0..currentIndex).toList()
+                val target = listOf(targetIndex)
+                val subsequentUserQueue = (targetIndex + 1 until tiers.size).filter { tiers[it] == QueueTier.USER_QUEUE }
+                val upcomingContext = (currentIndex + 1 until tiers.size).filter { tiers[it] == QueueTier.CONTEXT }
+                val upcomingAutoplay = (currentIndex + 1 until tiers.size).filter { tiers[it] == QueueTier.AUTOPLAY }
+
+                val order = history + target + subsequentUserQueue + upcomingContext + upcomingAutoplay
+                JumpOrderPlan(isPureSeek = false, newOrderIndices = order, newTargetIndex = history.size)
+            }
+            QueueTier.AUTOPLAY -> {
+                val history = (0..currentIndex).toList()
+                val target = listOf(targetIndex)
+                val preservedUserQueue = (currentIndex + 1 until tiers.size).filter { tiers[it] == QueueTier.USER_QUEUE }
+                val subsequentAutoplay = (targetIndex + 1 until tiers.size).filter { tiers[it] == QueueTier.AUTOPLAY }
+
+                val order = history + target + preservedUserQueue + subsequentAutoplay
+                JumpOrderPlan(isPureSeek = false, newOrderIndices = order, newTargetIndex = history.size, promoteTargetToContext = true)
+            }
+        }
+    }
+
+    /**
+     * Reconstructs the upcoming queue when a listener taps an item in the queue.
+     * Delegates to [computeJumpOrder] to maintain a single authoritative definition of jump ordering.
      */
     fun buildJumpQueue(
         currentTimeline: List<Song>,
         currentIndex: Int,
         targetIndex: Int,
     ): List<Song>? {
-        if (currentIndex !in currentTimeline.indices || targetIndex !in currentTimeline.indices) return null
-        if (targetIndex <= currentIndex) return null
+        val tiers = currentTimeline.map { it.queueTier }
+        val plan = computeJumpOrder(tiers, currentIndex, targetIndex) ?: return null
+        if (plan.isPureSeek && targetIndex <= currentIndex) return null
 
         val targetSong = currentTimeline[targetIndex]
-        val allFutureUserQueue = currentTimeline.subList(currentIndex + 1, currentTimeline.size)
-            .filter { it.queueTier == QueueTier.USER_QUEUE }
-        // Only what the jump skipped over is dropped; AutoPlay lined up past the
-        // target stays, or tapping any row above it would empty the AutoPlay list.
-        val remainingAutoplay = currentTimeline.subList(targetIndex + 1, currentTimeline.size)
-            .filter { it.queueTier == QueueTier.AUTOPLAY }
-
-        return when (targetSong.queueTier) {
-            QueueTier.AUTOPLAY -> {
+        return plan.newOrderIndices.drop(plan.newTargetIndex).map { idx ->
+            val song = currentTimeline[idx]
+            if (idx == targetIndex && plan.promoteTargetToContext) {
                 val sourceTitle = targetSong.playbackSource?.ifBlank { targetSong.title } ?: targetSong.title
-                val promotedTarget = targetSong.copy(
+                song.copy(
                     playbackSource = sourceTitle,
                     playbackSourceType = targetSong.playbackSourceType ?: PlaybackSourceType.QUEUE,
                 ).asQueueEntry(QueueTier.CONTEXT)
-                listOf(promotedTarget) + allFutureUserQueue + remainingAutoplay
-            }
-            QueueTier.CONTEXT -> {
-                val remainingContext = currentTimeline.subList(targetIndex + 1, currentTimeline.size)
-                    .filter { it.queueTier == QueueTier.CONTEXT }
-                listOf(targetSong) + allFutureUserQueue + remainingContext + remainingAutoplay
-            }
-            QueueTier.USER_QUEUE -> {
-                val subsequentUserQueue = currentTimeline.subList(targetIndex + 1, currentTimeline.size)
-                    .filter { it.queueTier == QueueTier.USER_QUEUE }
-                val future = currentTimeline.subList(currentIndex + 1, currentTimeline.size)
-                val futureContext = future.filter { it.queueTier == QueueTier.CONTEXT }
-                val futureAutoplay = future.filter { it.queueTier == QueueTier.AUTOPLAY }
-                listOf(targetSong) + subsequentUserQueue + futureContext + futureAutoplay
+            } else {
+                song
             }
         }
     }

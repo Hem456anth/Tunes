@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.music.bitchord.R
 import com.music.bitchord.auth.AuthStore
+import com.music.bitchord.auth.SignedIn
 import com.music.bitchord.auth.GoogleAccountSession
 import com.music.bitchord.auth.YouTubeProfile
 import com.music.bitchord.auth.profileId
@@ -14,6 +15,19 @@ import com.music.bitchord.data.AppUpdateChecker
 import com.music.bitchord.data.LocalMediaRepository
 import com.music.bitchord.data.LikeState
 import com.music.bitchord.data.YtMusicRepository
+import com.music.bitchord.data.TopPicks
+import com.music.bitchord.data.AppleArtistPhotos
+import com.music.bitchord.data.model.ArtistRef
+import com.music.bitchord.data.model.TopPick
+import com.music.bitchord.data.stats.ListeningStats
+import com.music.bitchord.data.stats.ReplayPeriod
+import android.util.Log
+import java.io.File
+import java.time.LocalDate
+import java.time.LocalDateTime
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
+import kotlin.coroutines.cancellation.CancellationException
 import com.music.bitchord.data.model.SPOTIFY_MISSING_PREFIX
 import com.music.bitchord.data.model.SPOTIFY_PENDING_PREFIX
 import com.music.bitchord.data.spotify.SPOTIFY_PAGE_PREFIX
@@ -25,6 +39,7 @@ import com.music.bitchord.data.lyrics.LyricLine
 import com.music.bitchord.data.lyrics.LyricsRepository
 import com.music.bitchord.data.lyrics.LyricsSource
 import com.music.bitchord.data.settings.AppSettings
+import com.music.bitchord.ui.navigation.AppNavigator
 import com.music.bitchord.data.innertube.Innertube
 import com.music.bitchord.data.innertube.PlaybackTracker
 import com.music.bitchord.data.innertube.StreamResolver
@@ -60,7 +75,9 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.channels.BufferOverflow
@@ -80,26 +97,34 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import com.music.bitchord.data.sources.AddonSource
 import com.music.bitchord.data.sources.SourceKind
 import com.music.bitchord.data.sources.SourceRegistry
 import com.music.bitchord.data.sources.SourceResolver
 import com.music.bitchord.data.sources.TrackMatcher
 import com.music.bitchord.playback.AudioCache
+import com.music.bitchord.playback.BoundedContextRequests
+import com.music.bitchord.playback.DirectSourceGate
+import com.music.bitchord.playback.contextEntryKey
 import com.music.bitchord.playback.StreamChoice
 import com.music.bitchord.ui.screens.CACHE_FOLDER_BROWSE_ID
-import com.music.bitchord.ui.screens.matchesSearch
+import com.music.bitchord.data.LocalGroup
+import com.music.bitchord.data.LocalGroups
+import com.music.bitchord.data.OfflinePlaylists
+import com.music.bitchord.data.matchesSearch
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /** What the Search tab searches: YouTube Music, or the Local Music folder on this device. */
-enum class SearchSource { YOUTUBE, LIBRARY }
+enum class SearchSource { YOUTUBE, LIBRARY, ADDONS }
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val authStore = AuthStore(app)
 
-    private val _signedIn = MutableStateFlow(authStore.isSignedIn)
+    // Process-wide, so the playback service offers Like on the same tracks.
+    private val _signedIn = SignedIn.state(app)
     val signedIn: StateFlow<Boolean> = _signedIn.asStateFlow()
 
     private val _home = MutableStateFlow<UiState<List<HomeShelf>>>(UiState.Loading)
@@ -134,6 +159,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _homeRecentlyPlayedLoading = MutableStateFlow(false)
     val homeRecentlyPlayedLoading: StateFlow<Boolean> = _homeRecentlyPlayedLoading.asStateFlow()
     private val homeLoadGeneration = AtomicLong(0L)
+
+    /**
+     * Home's "Top Picks for You" row: null until built, empty if there was
+     * nothing to build it from. Declared ahead of [init] for the same reason
+     * as [homeContinuation] — [loadHome] reaches it synchronously.
+     */
+    private val _topPicks = MutableStateFlow<List<TopPick>?>(null)
+    val topPicks: StateFlow<List<TopPick>?> = _topPicks.asStateFlow()
+    private val _topPicksLoading = MutableStateFlow(false)
+    val topPicksLoading: StateFlow<Boolean> = _topPicksLoading.asStateFlow()
+    private var topPicksJob: Job? = null
 
     private val _explore = MutableStateFlow<UiState<List<MoodGenreSection>>>(UiState.Loading)
     val explore: StateFlow<UiState<List<MoodGenreSection>>> = _explore.asStateFlow()
@@ -195,6 +231,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Where the Search tab looks — see [setSearchSource]. */
     private val _searchSource = MutableStateFlow(SearchSource.YOUTUBE)
     val searchSource: StateFlow<SearchSource> = _searchSource.asStateFlow()
+
+    /**
+     * The Addons source's answer for the submitted query: every enabled addon
+     * searched at once and their rows interleaved. Null until something has
+     * been submitted. These songs carry source track keys, so a tap plays the
+     * addon's own stream with no YouTube lookup in between.
+     */
+    private val _addonResults = MutableStateFlow<UiState<List<Song>>?>(null)
+    val addonResults: StateFlow<UiState<List<Song>>?> = _addonResults.asStateFlow()
+    private var addonSearchJob: Job? = null
+
+    /** The words typed into the Addons search before, newest first. */
+    val addonSearchHistory: StateFlow<List<String>> = SearchHistory.addonRecent
+
+    fun removeAddonSearch(query: String) = SearchHistory.removeAddonQuery(query)
+
+    fun clearAddonSearchHistory() = SearchHistory.clearAddonQueries()
 
     /** Every track in the Local Music folder, read when the Library source is picked. */
     private val _librarySongs = MutableStateFlow<UiState<List<Song>>>(UiState.Loading)
@@ -317,7 +370,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * than leaving the last answer sitting on a player that would now find a
      * different one.
      */
-    private var lyricsFor: Pair<String, Set<LyricsSource>>? = null
+    private var lyricsFor: List<Any>? = null
 
     /**
      * Called as the playing track changes; cheap no-op when already loaded.
@@ -342,7 +395,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             emptySet()
         }
-        val key = videoId to sources
+        val key = lyricsLookupKey(
+            videoId, sources, AppSettings.lyricsSourceOrder.value, AppSettings.prioritizeSyllableSync.value,
+        )
         if (lyricsFor == key) return
         // The duration lands a beat after the track, and a database match needs
         // it. Turned away here rather than inside the job below: claiming the
@@ -557,6 +612,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     private val _detailStack = MutableStateFlow<List<DetailPage>>(emptyList())
     val detailStack: StateFlow<List<DetailPage>> = _detailStack.asStateFlow()
+
+    /**
+     * The app's back stack: the routes pushed over the tabs, interleaved with
+     * [detailStack]. Held here so it survives a configuration change along
+     * with the release pages it is ordered against.
+     */
+    val navigator = AppNavigator(
+        detailDepth = { _detailStack.value.size },
+        popDetail = ::closeDetail,
+        clearDetails = ::clearDetail,
+    )
+
+    /** UI-side continuation fetches that can be handed to the playback service. */
+    private val fillInJobs = mutableMapOf<String, Job>()
 
     private val _releaseLibrary = MutableStateFlow<Map<String, LibraryState>>(emptyMap())
 
@@ -1220,7 +1289,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The playlist's entries as they stand on YouTube, for the reorder sheet —
+     * The playlist's entries as they stand on YouTube, for the reorder page —
      * see [YtMusicRepository.playlistEntries] for why not the open page's list.
      */
     fun loadPlaylistEntries(playlist: UserPlaylist, onResult: (Result<List<Song>>) -> Unit) {
@@ -1283,6 +1352,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     // nothing left to show.
                     _detailStack.value = _detailStack.value
                         .filterNot { it.browseId == playlist.browseId }
+                    navigator.onDetailStackShrunk(_detailStack.value.size)
                     libraryStale = true
                 },
                 onFailure = {},
@@ -1391,7 +1461,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         startSuggestPipeline()
         startTypeaheadMediaPipeline()
         loadHome()
-        loadExplore()
+        // Explore waits for its tab (see [onExploreShown]): its category list
+        // and the dozen-odd artwork browses after it went out at launch with
+        // Home's own requests, to the same host, for a page not yet opened.
         if (_signedIn.value) {
             loadLibrary()
             loadAccount()
@@ -1400,6 +1472,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // drop(1): the current value is just the count so far, not a play.
             PlaybackTracker.registeredPlays.drop(1).collect { homeStale = true }
+        }
+        viewModelScope.launch {
+            BoundedContextRequests.snapshot.collect { snapshot ->
+                snapshot?.let(::applyBoundedContextSnapshot)
+            }
         }
         viewModelScope.launch {
             AppSettings.filterNonMusicAudio.drop(1).collect {
@@ -1456,7 +1533,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!homeStale) return
         homeStale = false
         // A first load already in flight will pick the new play up by itself.
-        if (_home.value is UiState.Success) refresh(Feed.HOME)
+        if (_home.value is UiState.Success) refreshHomeRecents()
+    }
+
+    /**
+     * Re-fetches only the Recents shelf, swapping it in place. The rest of
+     * Home stays exactly as it was, so a shelf someone was eyeing doesn't
+     * vanish because a track started playing.
+     */
+    private fun refreshHomeRecents() {
+        if (!_signedIn.value) return
+        val identity = listenerKey()
+        val generation = homeLoadGeneration.get()
+        viewModelScope.launch {
+            YtMusicRepository.homeRecentlyPlayed().onSuccess { shelf ->
+                // A full load that started meanwhile fetches Recents itself.
+                if (!isCurrentHomeLoad(identity, generation)) return@onSuccess
+                shelf?.let { publishHomeShelves(listOf(it), prepend = true) }
+            }
+        }
     }
 
     private fun loadAccount() {
@@ -1522,8 +1617,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun loadExplore() {
+        exploreRequested = true
         _explore.value = UiState.Loading
         viewModelScope.launch { fetchExplore() }
+    }
+
+    private var exploreRequested = false
+
+    /** Call when the Explore tab becomes visible; loads it the first time. */
+    fun onExploreShown() {
+        if (!exploreRequested) loadExplore()
     }
 
     private suspend fun fetchExplore() {
@@ -1594,6 +1697,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Tapping a tab should leave any pushed page behind. */
     fun clearDetail() {
         if (_detailStack.value.isNotEmpty()) _detailStack.value = emptyList()
+        navigator.onDetailStackShrunk(0)
     }
 
     fun loadHome() {
@@ -1608,6 +1712,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // out: it has its own skeleton at the head of the page rather than the
         // one at the tail.
         _homePendingShelves.value = 1 + YtMusicRepository.HOME_SUPPLEMENT_BROWSE_IDS.size
+        loadTopPicks(identity, rebuild = false)
         viewModelScope.launch {
             launch {
                 try {
@@ -1655,6 +1760,94 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Puts the Top Picks row on screen. A row lasts one hour of the clock —
+     * 3:00 to 4:00, not sixty minutes from whenever it was first built — and
+     * the first open in a new hour builds the next one. Until that's ready the
+     * last row stays up, so Home never waits on it; within the hour an open
+     * makes no requests for it at all. [rebuild] builds one regardless.
+     */
+    private fun loadTopPicks(identity: String?, rebuild: Boolean) {
+        topPicksJob?.cancel()
+        val file = File(getApplication<Application>().filesDir, TOP_PICKS_FILE)
+        val slot = topPicksSlot()
+        topPicksJob = viewModelScope.launch {
+            val stored = withContext(Dispatchers.IO) {
+                runCatching { file.takeIf { it.exists() }?.readText() }.getOrNull()?.let(TopPicks::decode)
+            }?.takeIf { it.listener == identity && it.picks.isNotEmpty() }
+            stored?.let { AppleArtistPhotos.seed(it.photos) }
+            if (stored != null) {
+                _topPicks.value = stored.picks
+                topPicksSlotShown = stored.day
+            } else if (!rebuild) {
+                _topPicks.value = null
+            }
+            if (!rebuild && stored?.day == slot) {
+                _topPicksLoading.value = false
+                return@launch
+            }
+            _topPicksLoading.value = _topPicks.value == null
+            val picks = buildTopPicks()?.takeIf { it.isNotEmpty() }
+            if (identity != listenerKey()) return@launch
+            _topPicksLoading.value = false
+            if (picks == null) {
+                if (_topPicks.value == null) _topPicks.value = emptyList()
+                return@launch
+            }
+            _topPicks.value = picks
+            topPicksSlotShown = slot
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    file.writeText(TopPicks.encode(TopPicks.Stored(identity, slot, picks, AppleArtistPhotos.snapshot())))
+                }
+            }
+        }
+    }
+
+    /** The hour the row on screen was built in, e.g. `2026-10-21T15`. */
+    private var topPicksSlotShown: String? = null
+
+    /**
+     * Called when the app comes back to the foreground: if the clock has
+     * crossed into a new hour since the row on screen was built, build the
+     * next one. A no-op otherwise, and while one is building.
+     */
+    fun refreshTopPicksIfStale() {
+        if (topPicksJob?.isActive == true) return
+        if (topPicksSlotShown == null || topPicksSlotShown == topPicksSlot()) return
+        loadTopPicks(listenerKey(), rebuild = false)
+    }
+
+    /** Which hour of the clock [now] falls in: the date and the hour, 00 to 23. */
+    private fun topPicksSlot(now: LocalDateTime = LocalDateTime.now()): String =
+        "${now.toLocalDate()}T%02d".format(now.hour)
+
+    private suspend fun buildTopPicks(): List<TopPick>? {
+        // Home's first page may already hold the account's mixes; give it a
+        // moment to land so the builder reads them off it instead of asking.
+        val shelves = withTimeoutOrNull(8_000L) { _home.first { it !is UiState.Loading } }
+            .let { (it as? UiState.Success)?.data.orEmpty() }
+        return try {
+            TopPicks.build(shelves, localTaste())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("BitChord", "topPicks failed: ${e.message}")
+            null
+        }
+    }
+
+    /** This app's own Replay chart for the month — Top Picks' second opinion, and all it has signed out. */
+    private suspend fun localTaste(): TopPicks.LocalTaste {
+        val month = runCatching { ListeningStats.summary(ReplayPeriod.THIS_MONTH) }.getOrNull()
+            ?: return TopPicks.LocalTaste()
+        return TopPicks.LocalTaste(
+            artists = month.artists.take(10).map { ArtistRef(name = it.title, browseId = it.browseId) },
+            songs = month.songs.take(5).map { it.song },
+            genres = month.genres.take(3).map { it.title },
+        )
+    }
+
+    /**
      * One of the parallel first-page requests has finished. Ignored once a newer
      * load has taken over, which has already reset the count for its own fan-out.
      */
@@ -1686,6 +1879,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Refreshes the core feed without blanking the current Play page first. */
     private suspend fun refreshHome(identity: String?) = coroutineScope {
         val recent = if (_signedIn.value) async { YtMusicRepository.homeRecentlyPlayed() } else null
+        // Top Picks keeps to its hour; a pull refreshes the feed, not the
+        // picks, unless the hour has already turned over.
+        if (topPicksJob?.isActive != true) loadTopPicks(identity, rebuild = false)
         YtMusicRepository.home().onSuccess { feed ->
             if (identity != listenerKey()) return@onSuccess
             homeContinuation = feed.continuation
@@ -1799,6 +1995,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Removes a track from the account's listening history via its feedback token. Optimistically removes it from the in-memory list on success; leaves the list untouched on failure. */
+    fun removeFromHistory(token: String, onSuccess: () -> Unit = {}, onFailure: (Throwable) -> Unit = {}) {
+        viewModelScope.launch {
+            YtMusicRepository.removeFromHistory(token).onSuccess {
+                // Optimistically remove only the first entry whose feedbackToken matches, so the list updates immediately without a loading flash
+                val current = _history.value
+                if (current is UiState.Success) {
+                    _history.value = current.copy(data = current.data.filterNot { it.feedbackToken == token })
+                }
+                // Invalidate the in-memory history cache so the next load fetches fresh data from YouTube
+                YtMusicRepository.invalidateHistoryCache()
+                onSuccess()
+            }.onFailure {
+                // Keep the existing history list untouched — do NOT replace it with an error
+                Log.w("BitChord", "removeFromHistory failed: ${it.message}")
+                onFailure(it)
+            }
+        }
+    }
+
     /**
      * Recent searches: the words typed, as in Tunes 3.0. Stored as entities
      * with a "q:" id; entity records an older 3.1.0 build saved are hidden.
@@ -1842,7 +2058,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         searchSubmitted = true
         _suggestions.value = emptyList()
         _typeaheadResults.value = emptyList()
-        runSearch()
+        // Picking a suggestion or history item is deliberate, but it must NOT
+        // pollute the user's YTMusic server-side search history — only an
+        // explicit keyboard submission should do that.  Use the anonymous
+        // endpoint so YouTube does not log this query against the account.
+        runSearch(anonymous = true)
     }
 
     fun removeSearch(id: String) = SearchHistory.remove(id)
@@ -1856,6 +2076,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _suggestions.value = emptyList()
             _typeaheadResults.value = emptyList()
             _results.value = null
+            addonSearchJob?.cancel()
+            _addonResults.value = null
             // The list is about to switch from search results to recent
             // searches (or the empty state) — without this it can keep
             // whatever scroll offset the results list was left at, landing
@@ -1867,7 +2089,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         searchSubmitted = false
         // The Library source answers from the device on every keystroke (see
         // [libraryResults]); YouTube's completions have nothing to add to it.
-        if (_searchSource.value == SearchSource.LIBRARY) return
+        if (_searchSource.value != SearchSource.YOUTUBE) return
         // While typing, surface text completions — the pipeline already feeds
         // them through [suggestRequests] and publishes results via typeahead.
         suggestRequests.tryEmit(newValue)
@@ -1884,7 +2106,47 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         searchSubmitted = true
         _suggestions.value = emptyList()
         _typeaheadResults.value = emptyList()
-        runSearch()
+        if (_searchSource.value == SearchSource.ADDONS) {
+            runAddonSearch(q)
+            return
+        }
+        runSearch(anonymous = false)
+    }
+
+    /**
+     * Asks every enabled addon for [q] in parallel. A slow or failing addon
+     * only costs its own rows; the list is the rest of them, round-robin so
+     * no single catalogue buries the others.
+     */
+    private fun runAddonSearch(q: String) {
+        SearchHistory.recordAddonQuery(q)
+        addonSearchJob?.cancel()
+        _searchScrollReset.value += 1
+        // Every enabled addon, including ones the connection's quality setting
+        // skips for playback: their rows are still worth seeing, and the
+        // search page dims them and says why on a tap — see `isBlocked` there.
+        val addons = SourceRegistry.active().filterIsInstance<AddonSource>()
+        if (addons.isEmpty()) {
+            _addonResults.value = UiState.Error(text(R.string.search_addons_none))
+            return
+        }
+        _addonResults.value = UiState.Loading
+        addonSearchJob = viewModelScope.launch {
+            val perAddon = coroutineScope {
+                addons.map { addon ->
+                    async {
+                        withTimeoutOrNull(ADDON_SEARCH_TIMEOUT_MS) {
+                            runCatching { addon.search(q, limit = ADDON_SEARCH_LIMIT) }.getOrDefault(emptyList())
+                        } ?: emptyList()
+                    }
+                }.map { it.await() }
+            }
+            val merged = buildList {
+                val longest = perAddon.maxOfOrNull { it.size } ?: 0
+                for (i in 0 until longest) perAddon.forEach { rows -> rows.getOrNull(i)?.let(::add) }
+            }
+            _addonResults.value = UiState.Success(merged)
+        }
     }
 
     /**
@@ -1903,6 +2165,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         when (source) {
             SearchSource.LIBRARY -> loadLibrarySongs()
             SearchSource.YOUTUBE -> submitSearch()
+            SearchSource.ADDONS -> if (_query.value.isNotBlank()) submitSearch()
         }
     }
 
@@ -1946,6 +2209,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val query: String,
         val filter: SearchFilter,
         val requestId: Long,
+        val anonymous: Boolean = true,
     )
 
     private fun cacheKey(query: String, filter: SearchFilter) = "${filter.name}:$query"
@@ -1963,7 +2227,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ?.rows
     }
 
-    private fun runSearch() {
+    private fun runSearch(anonymous: Boolean = true) {
         val query = _query.value
         if (query.isBlank()) {
             // Nothing in flight can still be waiting to overwrite this: the
@@ -1978,7 +2242,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _searchScrollReset.value += 1
         searchSession = null
         _searchLoadingMore.value = false
-        searchRequests.tryEmit(SearchRequest(query, _filter.value, id))
+        searchRequests.tryEmit(SearchRequest(query, _filter.value, id, anonymous))
     }
 
     /**
@@ -2010,7 +2274,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val exact = searchCache.get(key)
                 val cached = exact?.rows ?: prefixMatch(request.query, request.filter)
                 _results.value = cached?.let { UiState.Success(it) } ?: UiState.Loading
-                if (exact != null) {
+                // An explicit submit still has to reach the server even when
+                // an anonymous lookup cached the same query: that call is what
+                // records it in the account's history.
+                if (exact != null && request.anonymous) {
                     searchSession = SearchSession(key, request.requestId, request.filter, exact.continuation)
                     return@collectLatest
                 }
@@ -2024,7 +2291,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // see [SourceResolver.substituteForYouTube] — which upgrades
                 // the ones it holds without any of them having to be a
                 // separate row to pick between.
-                val result = YtMusicRepository.searchPage(request.query, request.filter)
+                val result = YtMusicRepository.searchPage(request.query, request.filter, request.anonymous)
                 // A search that has been superseded shouldn't land on screen,
                 // whether it succeeded or failed.
                 if (request.requestId != newestRequestId.get()) return@collectLatest
@@ -2219,6 +2486,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 is SearchResult.Browse -> null
             }
         } ?: return
+        // Direct Source Stream fetches nothing before it is played. Warming
+        // here would also pin JioSaavn's quick answer ahead of the addon.
+        if (DirectSourceGate.isActive()) return
         viewModelScope.launch {
             runCatching {
                 val audio = song
@@ -2254,6 +2524,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** Today's Top Picks row, kept so the next launch paints it before any request. */
+        private const val TOP_PICKS_FILE = "top_picks_v4.json"
+
+        /** Per-addon budget for the Addons search tab; a slow addon is left out, not waited on. */
+        private const val ADDON_SEARCH_TIMEOUT_MS = 12_000L
+        private const val ADDON_SEARCH_LIMIT = 20
+
         private const val QUERY_PREFIX = "q:"
         /** How many Spotify tracks are looked up on YouTube Music at once. */
         private const val SPOTIFY_MATCH_PARALLELISM = 6
@@ -2320,7 +2597,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
          */
 
         fun browseTypeOf(browseId: String, fallback: BrowseType = BrowseType.OTHER): BrowseType = when {
-            browseId.startsWith(Downloads.PLAYLIST_PREFIX) -> BrowseType.PLAYLIST
+            // Built for playlists, but an album downloaded whole opens through
+            // the same prefix, and its page should read as the album it is.
+            browseId.startsWith(Downloads.PLAYLIST_PREFIX) ->
+                Downloads.recordIdOf(browseId)
+                    ?.let { Downloads.collections.value[it] }
+                    ?.takeIf { !it.playlist }
+                    ?.let { BrowseType.ALBUM }
+                    ?: BrowseType.PLAYLIST
+            browseId.startsWith(LocalGroups.PREFIX) -> LocalGroups.typeOf(browseId) ?: fallback
+            browseId.startsWith(OfflinePlaylists.PREFIX) -> BrowseType.PLAYLIST
             browseId.startsWith("UC") -> BrowseType.ARTIST
             browseId.startsWith("MPREb") || browseId.startsWith("VLOLAK") || browseId.startsWith("OLAK") -> BrowseType.ALBUM
             browseId.startsWith("VL") || browseId.startsWith("PL") -> BrowseType.PLAYLIST
@@ -2441,37 +2727,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     if (it.browseId == browseId && it.songs is UiState.Loading) it.copy(songs = UiState.Success(onDevice)) else it
                 }
             }
+            if (localPlaylist != null) {
+                name = localPlaylist.title
+                credit = getApplication<Application>().getString(R.string.local_playlist_subtitle, localPlaylist.songs.size)
+                artwork = localPlaylist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl
+            }
+            // Named by the store rather than by whatever opened it, which
+            // may be a "Playing from" label from before a rename.
+            OfflinePlaylists.get(browseId)?.let { name = it.title }
+            val local = localPageState(browseId)
+            // Reopened by id alone — the player's "Playing from" — a page off
+            // the device arrives with only its title, and offline nothing from
+            // YouTube or Apple ever lends it a cover. It takes the cover and
+            // credit its own card had instead.
+            if (local is UiState.Success) {
+                val record = Downloads.recordIdOf(browseId)?.let { Downloads.collections.value[it] }
+                val group = LocalGroups.groupOf(browseId, local.data)
+                if (thumbnailUrl == null) artwork = record?.thumbnailUrl ?: group?.thumbnailUrl
+                if (subtitle.isBlank()) credit = (record?.subtitle ?: group?.subtitle)?.ifBlank { null }
+            }
             val state = when {
-                localPlaylist != null -> {
-                    name = localPlaylist.title
-                    credit = getApplication<Application>().getString(R.string.local_playlist_subtitle, localPlaylist.songs.size)
-                    artwork = localPlaylist.songs.firstOrNull { !it.thumbnailUrl.isNullOrBlank() }?.thumbnailUrl
-                    if (localPlaylist.songs.isEmpty()) UiState.Error(text(R.string.spotify_import_empty_playlist))
-                    else UiState.Success(localPlaylist.songs)
-                }
-                remote != null -> remoteSongsState(remote)
-                Downloads.recordIdOf(browseId) != null -> {
-                    val songs = downloadedPlaylist(browseId)
-                    if (songs.isEmpty()) UiState.Error(text(R.string.downloaded_playlist_empty))
-                    else UiState.Success(songs)
-                }
-                browseId == "local:downloads" -> {
-                    val context = getApplication<Application>()
-                    val songs = Downloads.getDownloadedSongs(context)
-                    if (songs.isEmpty()) UiState.Error("No downloaded tracks")
-                    else UiState.Success(songs)
-                }
-                browseId == CACHE_FOLDER_BROWSE_ID -> cachedSongsState()
-                browseId == "local:all" -> {
-                    val context = getApplication<Application>()
-                    if (!LocalMediaRepository.hasStoragePermission(context)) {
-                        UiState.Error(text(R.string.storage_required_read))
-                    } else {
-                        val songs = LocalMediaRepository.getLocalMusic(context)
-                        if (songs.isEmpty()) UiState.Error(text(R.string.no_local_audio_found))
-                        else UiState.Success(songs)
-                    }
-                }
+                local != null -> local
                 resolved == BrowseType.ARTIST -> {
                     YtMusicRepository.artistPage(browseId).fold(
                         onSuccess = { page ->
@@ -2543,6 +2819,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         title = name ?: it.title,
                         subtitle = credit ?: it.subtitle,
                         suggestedSongs = suggested,
+                        continuation = more,
                         library = library,
                         description = description,
                         subscriberCountText = subscriberCountText,
@@ -2639,44 +2916,89 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         albumName = album,
     )
 
+    /**
+     * Pushes one album, playlist or artist out of a device folder as a page of
+     * its own, with the rows the folder already had in hand — so it opens on
+     * its tracks rather than on a skeleton while the folder is read again.
+     * [reloadLocalDetail] keeps it current from there, like any `local:` page.
+     */
+    fun openLocalGroup(group: LocalGroup) {
+        if (_detailStack.value.lastOrNull()?.browseId == group.browseId) return
+        _detailStack.value += DetailPage(
+            browseId = group.browseId,
+            title = group.title,
+            subtitle = group.subtitle,
+            thumbnailUrl = group.thumbnailUrl,
+            songs = if (group.songs.isEmpty()) UiState.Error(text(R.string.no_tracks_here)) else UiState.Success(group.songs),
+            type = group.type,
+        )
+    }
+
+    /** Renames an open page in place — a device playlist, whose title is the store's. */
+    fun retitleDetail(browseId: String, title: String) {
+        if (title.isBlank()) return
+        _detailStack.value = _detailStack.value.map { if (it.browseId == browseId) it.copy(title = title) else it }
+    }
+
     fun reloadLocalDetail(browseId: String) {
         viewModelScope.launch {
-            val context = getApplication<Application>()
-            val localPlaylist = com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(browseId)
-            val remote = remoteLibrary(browseId)
-            val state: UiState<List<Song>> = when {
-                localPlaylist != null -> {
-                    if (localPlaylist.songs.isEmpty()) UiState.Error(text(R.string.spotify_import_empty_playlist))
-                    else UiState.Success(localPlaylist.songs)
-                }
-                remote != null -> remoteSongsState(remote)
-                Downloads.recordIdOf(browseId) != null -> {
-                    val songs = downloadedPlaylist(browseId)
-                    if (songs.isEmpty()) UiState.Error(text(R.string.downloaded_playlist_empty))
-                    else UiState.Success(songs)
-                }
-                browseId == "local:downloads" -> {
-                    val songs = Downloads.getDownloadedSongs(context)
-                    if (songs.isEmpty()) UiState.Error("No downloaded tracks")
-                    else UiState.Success(songs)
-                }
-                browseId == CACHE_FOLDER_BROWSE_ID -> cachedSongsState()
-                browseId == "local:all" -> {
-                    if (!LocalMediaRepository.hasStoragePermission(context)) {
-                        UiState.Error(text(R.string.storage_required_read))
-                    } else {
-                        val songs = LocalMediaRepository.getLocalMusic(context)
-                        if (songs.isEmpty()) UiState.Error(text(R.string.no_local_audio_found))
-                        else UiState.Success(songs)
-                    }
-                }
-                else -> return@launch
-            }
+            val state = localPageState(browseId) ?: return@launch
             _detailStack.value = _detailStack.value.map {
                 if (it.browseId == browseId) {
                     it.copy(songs = state)
                 } else it
             }
+        }
+    }
+
+    /**
+     * The listing behind a page whose tracks come from this device or a file
+     * server rather than YouTube — a device folder, a release downloaded whole,
+     * a playlist in the app's own store, a remote library, or one album or
+     * artist grouped out of a folder — or null for every other page.
+     *
+     * The one place each of those is read, so opening a page, refreshing it
+     * and queueing it from a menu can't disagree about what is on it.
+     */
+    private suspend fun localPageState(browseId: String): UiState<List<Song>>? {
+        val context = getApplication<Application>()
+        fun nonEmpty(songs: List<Song>, empty: () -> String): UiState<List<Song>> =
+            if (songs.isEmpty()) UiState.Error(empty()) else UiState.Success(songs)
+
+        if (OfflinePlaylists.isOfflinePlaylist(browseId)) {
+            // A playlist deleted while its page was still reachable — from
+            // "Playing from", say — is an empty page, not a YouTube lookup.
+            val playlist = OfflinePlaylists.get(browseId) ?: return UiState.Error(text(R.string.no_tracks_here))
+            return nonEmpty(LocalMediaRepository.present(context, playlist.songs)) {
+                text(if (playlist.isLiked) R.string.offline_liked_empty else R.string.offline_playlist_empty)
+            }
+        }
+        com.music.bitchord.data.spotify.LocalPlaylistStore.getPlaylist(browseId)?.let { playlist ->
+            return nonEmpty(playlist.songs) { text(R.string.spotify_import_empty_playlist) }
+        }
+        remoteLibrary(browseId)?.let { return remoteSongsState(it) }
+        LocalGroups.folderOf(browseId)?.let { folderId ->
+            // Read off a fresh listing of the folder it came from: a grouping
+            // has nothing of its own to read, and whatever the folder says
+            // when it can't be listed is what this page says too.
+            return when (val folder = localPageState(folderId)) {
+                is UiState.Success -> nonEmpty(LocalGroups.songsOf(browseId, folder.data)) { text(R.string.no_tracks_here) }
+                null -> UiState.Error(text(R.string.no_tracks_here))
+                else -> folder
+            }
+        }
+        return when {
+            Downloads.recordIdOf(browseId) != null ->
+                nonEmpty(downloadedPlaylist(browseId)) { text(R.string.downloaded_playlist_empty) }
+            browseId == "local:downloads" ->
+                nonEmpty(Downloads.getDownloadedSongs(context)) { "No downloaded tracks" }
+            browseId == CACHE_FOLDER_BROWSE_ID -> cachedSongsState()
+            browseId == "local:all" -> if (!LocalMediaRepository.hasStoragePermission(context)) {
+                UiState.Error(text(R.string.storage_required_read))
+            } else {
+                nonEmpty(LocalMediaRepository.getLocalMusic(context)) { text(R.string.no_local_audio_found) }
+            }
+            else -> null
         }
     }
 
@@ -2734,7 +3056,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * that loops back on itself instead of running dry.
      */
     private fun fillIn(browseId: String, token: String, artworkFallback: String?) {
-        viewModelScope.launch {
+        fillInJobs[browseId]?.cancel()
+        fillInJobs[browseId] = viewModelScope.launch {
             // Publish and draw the first response before spending the shared
             // connection on page two. On a long playlist the continuation can
             // otherwise start in the same main-loop turn as the state update,
@@ -2743,35 +3066,114 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             var next: String? = token
             while (next != null) {
                 val fetched = YtMusicRepository.moreSongs(next).getOrNull() ?: return@launch
+                // Repository calls may finish after cancellation. Do not let
+                // an in-flight UI page append after the playback service has
+                // taken the continuation over.
+                currentCoroutineContext().ensureActive()
+                // The same page can be on the stack twice (opened again from
+                // inside itself). One walk per browseId grows every copy; a
+                // second walk replaces the first, so each copy merges by key
+                // and only takes a token from a page that taught it something.
                 val stack = _detailStack.value
-                val index = stack.indexOfFirst { it.browseId == browseId }
-                if (index < 0) return@launch
-                val current = stack[index]
-                val existing = (current.songs as? UiState.Success)?.data ?: return@launch
-                val known = existing.mapTo(HashSet()) { it.videoId }
-                val added = fetched.songs
-                    .filter { known.add(it.videoId) }
-                    .withArtwork(artworkFallback)
-                // Suggestions can arrive on a later page than the real
-                // tracks, once the playlist's own continuation runs dry —
-                // see parsePlaylistShelf — so they're tracked separately
-                // rather than folded into [known].
-                val knownSuggested = current.suggestedSongs.mapTo(HashSet()) { it.videoId }
-                val addedSuggested = fetched.suggested
-                    .filter { it.videoId !in known && knownSuggested.add(it.videoId) }
-                    .withArtwork(artworkFallback)
-                // A page with nothing new on it means the feed has looped back
-                // rather than run dry with a token still attached.
-                if (added.isEmpty() && addedSuggested.isEmpty()) return@launch
-                _detailStack.value = stack.toMutableList().also {
-                    it[index] = current.copy(
+                if (stack.none { it.browseId == browseId }) return@launch
+                var progressed = false
+                val updated = stack.map { current ->
+                    if (current.browseId != browseId) return@map current
+                    val existing = (current.songs as? UiState.Success)?.data ?: return@map current
+                    val known = existing.mapTo(HashSet()) { it.contextEntryKey() }
+                    val added = fetched.songs
+                        .filter { known.add(it.contextEntryKey()) }
+                        .withArtwork(artworkFallback)
+                    val knownVideoIds = (existing + added).mapTo(HashSet()) { it.videoId }
+                    // Suggestions can arrive on a later page than the real
+                    // tracks, once the playlist's own continuation runs dry —
+                    // see parsePlaylistShelf — so they're tracked separately
+                    // rather than folded into [known].
+                    val knownSuggested = current.suggestedSongs.mapTo(HashSet()) { it.videoId }
+                    val addedSuggested = fetched.suggested
+                        .filter { it.videoId !in knownVideoIds && knownSuggested.add(it.videoId) }
+                        .withArtwork(artworkFallback)
+                    if (added.isEmpty() && addedSuggested.isEmpty()) return@map current
+                    progressed = true
+                    current.copy(
                         songs = UiState.Success(existing + added),
                         suggestedSongs = current.suggestedSongs + addedSuggested,
+                        continuation = fetched.continuation,
                     )
                 }
+                // A page with nothing new for any copy means the feed has looped
+                // back rather than run dry with a token still attached.
+                if (!progressed) return@launch
+                _detailStack.value = updated
                 next = fetched.continuation
             }
+        }.also { job ->
+            job.invokeOnCompletion {
+                if (fillInJobs[browseId] === job) fillInJobs.remove(browseId)
+            }
         }
+    }
+
+    /**
+     * Applies the service-owned canonical context to its matching open page.
+     *
+     * The service only materialises a small queue window, while its registry
+     * keeps the complete canonical list. Mirroring that registry here avoids a
+     * page that appears to stop growing as soon as playback starts.
+     */
+    private fun applyBoundedContextSnapshot(snapshot: BoundedContextRequests.Snapshot) {
+        val browseId = snapshot.request.source.id ?: return
+        val stack = _detailStack.value
+        val index = stack.indexOfLast { it.browseId == browseId }
+        if (index < 0) return
+        val page = stack[index]
+        if (page.type != BrowseType.ALBUM && page.type != BrowseType.PLAYLIST) return
+        // Exactly one loader walks the continuation. While the service owns
+        // it the page's own fill-in stops; when the service gives up (or never
+        // took it — a party, a Cast race) the page resumes from the newest token.
+        if (snapshot.serviceOwned) {
+            if (snapshot.continuationToken != null) fillInJobs.remove(browseId)?.cancel()
+        } else if (snapshot.released && snapshot.continuationToken != null &&
+            fillInJobs[browseId]?.isActive != true
+        ) {
+            fillIn(browseId, snapshot.continuationToken, page.thumbnailUrl)
+        }
+        val existing = (page.songs as? UiState.Success)?.data ?: return
+        val known = existing.mapTo(HashSet()) { it.contextEntryKey() }
+        val added = snapshot.songs
+            .filter { known.add(it.contextEntryKey()) }
+            .withArtwork(page.thumbnailUrl)
+        // Never move the page's token backwards: a page whose own fill-in is
+        // ahead of the service would otherwise hand a later tap a token for
+        // songs it already has, which the registry rejects as a duplicate page.
+        val continuation = if (snapshot.songs.size >= existing.size) snapshot.continuationToken else page.continuation
+        if (added.isEmpty() && page.continuation == continuation) return
+        _detailStack.value = stack.toMutableList().also {
+            it[index] = page.copy(
+                songs = UiState.Success(existing + added),
+                continuation = continuation,
+            )
+        }
+    }
+
+    /**
+     * Returns the newest page snapshot for a bounded playback handoff. The
+     * page's own fill-in keeps running until the service reports that it has
+     * taken the continuation over (see [applyBoundedContextSnapshot]); the
+     * tap may yet go down another path, and cancelling here left the page
+     * permanently cut short whenever it did.
+     */
+    fun takePlaybackContext(browseId: String): DetailPage? {
+        val stack = _detailStack.value
+        val index = stack.indexOfLast { it.browseId == browseId }
+        if (index < 0) return null
+        val mirrored = BoundedContextRequests.snapshot.value
+            ?.takeIf { it.request.source.id == browseId }
+        if (mirrored != null) {
+            applyBoundedContextSnapshot(mirrored)
+            return _detailStack.value.getOrNull(index)
+        }
+        return stack[index]
     }
 
     /**
@@ -2815,33 +3217,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         onResult: (Result<List<Song>>) -> Unit,
     ) {
         viewModelScope.launch {
-            val context = getApplication<Application>()
-            val remote = remoteLibrary(browseId)
-            val result = when {
-                remote != null -> runCatching {
-                    remote.songs().ifEmpty { error(text(remote.emptyRes)) }
-                }
-                Downloads.recordIdOf(browseId) != null -> runCatching {
-                    downloadedPlaylist(browseId).ifEmpty {
-                        error(text(R.string.downloaded_playlist_empty))
-                    }
-                }
-                browseId == "local:downloads" -> runCatching {
-                    Downloads.getDownloadedSongs(context)
-                        .ifEmpty { error("No downloaded tracks") }
-                }
-                browseId == CACHE_FOLDER_BROWSE_ID -> runCatching {
-                    AudioCache.cachedSongs().map { it.song }
-                        .ifEmpty { error(text(R.string.cached_songs_empty)) }
-                }
-                browseId == "local:all" -> runCatching {
-                    if (!LocalMediaRepository.hasStoragePermission(context)) {
-                        error(text(R.string.storage_required_read))
-                    }
-                    LocalMediaRepository.getLocalMusic(context)
-                        .ifEmpty { error(text(R.string.no_local_audio_found)) }
-                }
-                else -> YtMusicRepository.allSongs(browseId)
+            val result = when (val local = localPageState(browseId)) {
+                is UiState.Success -> Result.success(local.data)
+                is UiState.Error -> Result.failure(IllegalStateException(local.message))
+                UiState.Loading -> Result.failure(IllegalStateException(text(R.string.no_tracks_here)))
+                null -> YtMusicRepository.allSongs(browseId)
             }
             onResult(result.map { it.withArtwork(artworkFallback) })
         }
@@ -2852,6 +3232,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val stack = _detailStack.value
         if (stack.isEmpty()) return false
         _detailStack.value = stack.dropLast(1)
+        navigator.onDetailStackShrunk(_detailStack.value.size)
         return true
     }
 
@@ -3023,8 +3404,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val profile = supplied ?: source.profiles.firstOrNull { it.profileId == selectedProfileId } ?: return
         if (accountId == _activeAccountId.value && profile.profileId == _activeProfileId.value) return
         cacheCurrentListener()
+        val index = source.profiles.indexOfFirst { it.profileId == profile.profileId }
+        val updatedProfiles = if (index >= 0) {
+            source.profiles.toMutableList().apply { set(index, profile) }
+        } else {
+            source.profiles + profile
+        }
         val updated = source.copy(
-            profiles = (source.profiles.filterNot { it.profileId == profile.profileId } + profile),
+            profiles = updatedProfiles,
             activeProfileId = profile.profileId,
         )
         authStore.upsertSession(updated)
@@ -3193,3 +3580,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun text(id: Int): String = getApplication<Application>().getString(id)
 }
+
+/**
+ * What one lyrics lookup for the playing track was made under. The order and
+ * the syllable preference pick a different answer from the same providers, so
+ * a change in either is a new lookup, as switching a source on or off is.
+ */
+internal fun lyricsLookupKey(
+    videoId: String,
+    sources: Set<LyricsSource>,
+    order: List<LyricsSource>,
+    prioritizeSyllableSync: Boolean,
+): List<Any> = listOf(videoId, sources, order, prioritizeSyllableSync)

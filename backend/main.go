@@ -37,6 +37,9 @@ var (
 	)
 	presenceLimiter = newIPRateLimiter(time.Minute, config.PresencePingsPerMinute, config.PresenceRateLimitMaxIPs)
 	upgrader = websocket.Upgrader{
+		// Answered only to a browser that offered it with its token (see
+		// parseSocketToken); a native client offers no subprotocol and gets none.
+		Subprotocols: []string{socketProtocol},
 		CheckOrigin: func(r *http.Request) bool {
 			origin := r.Header.Get("Origin")
 			return origin == "" || config.IsAllowedOrigin(origin)
@@ -63,6 +66,7 @@ func main() {
 	// Open-app counter
 	mux.HandleFunc("POST /api/presence", handlePresence)
 	mux.HandleFunc("GET /api/stats/live", handleLiveStats)
+	mux.HandleFunc("GET /api/stats/live/badge.svg", handleLiveBadge)
 
 	// Web invite endpoint
 	mux.HandleFunc("GET /invite/{code}", handleInviteLanding)
@@ -214,6 +218,30 @@ func parseBearerToken(r *http.Request) string {
 	return ""
 }
 
+// Browsers cannot set headers on a WebSocket handshake, so the web player
+// offers its token as a subprotocol instead: "bitchord.v1, bitchord.token.<hex>".
+// It still stays out of the URL, and so out of access logs, which is the reason
+// the header was chosen; the server answers with "bitchord.v1" alone and never
+// echoes the token.
+const (
+	socketProtocol    = "bitchord.v1"
+	socketTokenPrefix = "bitchord.token."
+)
+
+// parseSocketToken reads the party token from the Authorization header (the
+// apps) or from an offered subprotocol (browsers).
+func parseSocketToken(r *http.Request) string {
+	if token := parseBearerToken(r); token != "" {
+		return token
+	}
+	for _, protocol := range websocket.Subprotocols(r) {
+		if strings.HasPrefix(protocol, socketTokenPrefix) {
+			return strings.TrimPrefix(protocol, socketTokenPrefix)
+		}
+	}
+	return ""
+}
+
 // REST Handlers
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -243,14 +271,8 @@ func handleTime(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePresence takes the open apps' heartbeat:
-// {"id": "<install uuid>", "platform": "android"|"pc", "open": true|false}.
+// {"id": "<install uuid>", "platform": "android"|"pc"|"browser", "open": true|false}.
 func handlePresence(w http.ResponseWriter, r *http.Request) {
-	// Only the apps ping, and they send no Origin. Refusing browsers stops any web
-	// page from making its visitors post made-up installs from their addresses.
-	if r.Header.Get("Origin") != "" {
-		jsonError(w, http.StatusForbidden, "origin_not_allowed", "Presence is only accepted from the apps.")
-		return
-	}
 	if !presenceLimiter.Allow(clientIP(r)) {
 		jsonError(w, http.StatusTooManyRequests, "rate_limited", "Too many presence pings from this address.")
 		return
@@ -270,11 +292,19 @@ func handlePresence(w http.ResponseWriter, r *http.Request) {
 	}
 	platform, ok := presence.ParsePlatform(body.Platform)
 	if !ok {
-		jsonError(w, http.StatusUnprocessableEntity, "invalid_platform", "platform must be android or pc.")
+		jsonError(w, http.StatusUnprocessableEntity, "invalid_platform", "platform must be android, pc or browser.")
 		return
 	}
 	if body.Open == nil {
 		jsonError(w, http.StatusUnprocessableEntity, "invalid_open", "open must be true or false.")
+		return
+	}
+	// The native apps send no Origin; only the web player does, and only from a
+	// named origin. Refusing every other browser stops any web page from making
+	// its visitors post made-up installs from their addresses.
+	origin := r.Header.Get("Origin")
+	if (platform == presence.Browser) != (origin != "") || (origin != "" && !config.IsAllowedOrigin(origin)) {
+		jsonError(w, http.StatusForbidden, "origin_not_allowed", "Presence is only accepted from the apps and the web player.")
 		return
 	}
 	if *body.Open {
@@ -291,6 +321,26 @@ func handleLiveStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "public, max-age=15")
 	jsonResponse(w, http.StatusOK, presenceTracker.Counts())
+}
+
+// handleLiveBadge draws the README's "listening now" badge itself. Going
+// through shields.io meant its 2-5 minute cache stacked on GitHub's camo
+// proxy, so the README trailed the real count by minutes. no-cache here is
+// what camo honours, so every README view gets the current number.
+//
+// The geometry copies shields' for-the-badge render byte for byte: a fixed
+// 124.25px label, bold Verdana digits at 8.25px each, 12px padding a side.
+func handleLiveBadge(w http.ResponseWriter, r *http.Request) {
+	value := fmt.Sprint(presenceTracker.Counts().Online)
+	valueWidth := 8.25*float64(len(value)) + 24
+	width := 124.25 + valueWidth
+	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%g" height="28" role="img" aria-label="LISTENING NOW: %s"><title>LISTENING NOW: %s</title><g shape-rendering="crispEdges"><rect width="124.25" height="28" fill="#0d1117"/><rect x="124.25" width="%g" height="28" fill="#fb4f67"/></g><g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="100"><text transform="scale(.1)" x="621.25" y="175" textLength="1002.5">LISTENING NOW</text><text transform="scale(.1)" x="%g" y="175" textLength="%g" font-weight="bold">%s</text></g></svg>`,
+		width, value, value, valueWidth, (124.25+valueWidth/2)*10, 82.5*float64(len(value)), value)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "image/svg+xml;charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(svg))
 }
 
 func handleCreateParty(w http.ResponseWriter, r *http.Request) {
@@ -809,7 +859,7 @@ func handleInviteLanding(w http.ResponseWriter, r *http.Request) {
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	code := r.PathValue("code")
-	token := parseBearerToken(r)
+	token := parseSocketToken(r)
 	if token == "" {
 		http.Error(w, "missing token", http.StatusUnauthorized)
 		return

@@ -123,7 +123,9 @@ object CastController {
             // main thread of whichever screen happened to ask first.
             CastContext.getSharedInstance(app, Executors.newSingleThreadExecutor())
                 .addOnSuccessListener { ctx -> onReady(app, ctx) }
-                .addOnFailureListener { Log.w(TAG, "Cast framework unavailable", it) }
+                .addOnFailureListener {
+                    Log.w(TAG, "Cast framework unavailable", it)
+                }
         } catch (e: Exception) {
             Log.w(TAG, "Cast framework unavailable", e)
         }

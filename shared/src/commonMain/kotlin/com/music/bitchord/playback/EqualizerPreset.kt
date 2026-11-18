@@ -9,8 +9,8 @@ package com.music.bitchord.playback
  * rather than bells ([FilterKind]), so a borrowed table would not describe the
  * same curve even with the numbers transcribed correctly. They are deliberately
  * modest — nothing reaches the ±12 dB the sliders allow, because a preset is a
- * place to start from and every decibel of boost is a decibel of headroom
- * [EqCurve.preampDb] has to take back.
+ * place to start from and every decibel of boost costs headroom, half of it
+ * taken back by [EqCurve.preampDb] and the rest left to [PeakLimiter].
  *
  * [CUSTOM] carries no gains. It is what the tab reports once a slider has been
  * moved, so the row stops naming a preset the bands no longer match.

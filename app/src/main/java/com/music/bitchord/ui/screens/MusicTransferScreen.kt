@@ -1,5 +1,6 @@
 package com.music.bitchord.ui.screens
 
+import com.music.bitchord.auth.SpotifyLoginScreen
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -192,7 +193,7 @@ fun MusicTransferScreen(
     }
 
     when (stage) {
-        TransferStage.SPOTIFY_LOGIN -> SpotifyLogin(
+        TransferStage.SPOTIFY_LOGIN -> SpotifyLoginScreen(
             modifier = modifier.padding(contentPadding),
             onConnected = { token ->
                 AppSettings.setSpotifySpdcToken(token)

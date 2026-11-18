@@ -35,6 +35,9 @@ val androidSdk: String? = file("local.properties")
 
 if (androidSdk != null && file(androidSdk).isDirectory) {
     include(":app")
+    // Tunes ships the phone app only. Upstream's :tv and :wearos apps are left
+    // out (their fonts can't be redistributed); wearos/protocol stays because
+    // the phone app compiles the shared WearProtocol.kt from it.
 } else {
     logger.lifecycle("No Android SDK found — building the desktop targets only.")
 }

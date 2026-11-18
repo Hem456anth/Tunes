@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,8 +28,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import coil3.compose.LocalPlatformContext
+import com.music.bitchord.ui.graphics.FADE_CURVE_STOPS
 import com.music.bitchord.ui.graphics.forPixelAccess
 import com.music.bitchord.ui.graphics.paletteSwatches
+import com.music.bitchord.ui.graphics.smootherStep
 import com.music.bitchord.ui.graphics.toImageBitmap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -38,6 +41,7 @@ import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlin.math.PI
@@ -103,6 +107,18 @@ fun MeshGradientBackground(
      * many cards are on screen.
      */
     animated: Boolean = true,
+    /**
+     * How long a palette change takes to crossfade. A track skip wants it
+     * brisk; a surface that changes colour on a timer wants it long enough
+     * that one fade runs into the next and the colour never sits still.
+     */
+    colorFadeMillis: Int = 1400,
+    /**
+     * Holds the blobs where they are, without the settling drift that turning
+     * [continuous] off would start. For a caller that stops the mesh for a
+     * while — a scroll, the player up over it — and picks it up again after.
+     */
+    paused: Boolean = false,
 ) {
     val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
 
@@ -112,7 +128,7 @@ fun MeshGradientBackground(
 
     // Each colour slot crossfades independently when the track (palette) changes,
     // unless "reduce animation" is on, in which case colours snap straight to target.
-    val colorSpec: AnimationSpec<Color> = if (reduceAnimation || !animated) snap() else tween(1400)
+    val colorSpec: AnimationSpec<Color> = if (reduceAnimation || !animated) snap() else tween(colorFadeMillis)
     val animatedColors = tuned.mapIndexed { index, color ->
         animateColorAsState(color, colorSpec, label = "meshColor$index").value
     }
@@ -121,9 +137,10 @@ fun MeshGradientBackground(
     // Read in the draw lambda, not here: an Animatable read during draw
     // invalidates only the drawing, leaving composition out of the loop.
     val phase = remember { Animatable(0f) }
-    LaunchedEffect(trackKey, reduceAnimation, continuous, animated) {
+    LaunchedEffect(trackKey, reduceAnimation, continuous, animated, paused) {
         when {
             !animated || reduceAnimation -> phase.snapTo(0f)
+            paused -> Unit
             // A full turn at a time, restarted rather than looped with an
             // infinite spec: the blobs' speeds are irrational multiples of each
             // other, so the pattern never repeats, and a linear phase keeps the
@@ -183,8 +200,14 @@ fun MeshGradientBackground(
             )
             val radius = size.maxDimension * 0.62f
             drawCircle(
+                // Along smootherstep rather than a straight falloff: a straight one
+                // stops dead at the rim, and that corner showed as a ring where each
+                // blob ended, even through the blur.
                 brush = Brush.radialGradient(
-                    colors = listOf(color.copy(alpha = 0.85f), color.copy(alpha = 0f)),
+                    colorStops = Array(FADE_CURVE_STOPS + 1) { i ->
+                        val t = i / FADE_CURVE_STOPS.toFloat()
+                        t to color.copy(alpha = BLOB_ALPHA * (1f - smootherStep(t)))
+                    },
                     center = center,
                     radius = radius,
                 ),
@@ -203,6 +226,60 @@ fun MeshGradientBackground(
             ),
         )
     }
+}
+
+/** A blob's opacity at its centre. */
+private const val BLOB_ALPHA = 0.85f
+
+/**
+ * How long each palette in a [cyclingMeshPalette] is held, which is also how
+ * long the fade into it takes — pass it as `colorFadeMillis` so one crossfade
+ * runs straight into the next and the colour is never at rest.
+ */
+const val MESH_CYCLE_MILLIS = 3_600
+
+/**
+ * BitChord's own colours, for the surfaces that have no artwork to take them
+ * from: the welcome pages and the sign-in card on Home. Starts on Apple
+ * Music's red and wanders off from there.
+ */
+val WelcomeMeshPalettes: List<MeshPalette> = listOf(
+    // Red, violet, ember.
+    MeshPalette(listOf(Color(0xFFFA2D48), Color(0xFF7B2FF7), Color(0xFFFF7A45), Color(0xFF2E1A8A))),
+    // Sunset.
+    MeshPalette(listOf(Color(0xFFFF4E8A), Color(0xFFFF9A3C), Color(0xFFE0245E), Color(0xFF6A1B9A))),
+    // Ocean.
+    MeshPalette(listOf(Color(0xFF1E88E5), Color(0xFF00BFA5), Color(0xFF5E35B1), Color(0xFF0D47A1))),
+    // Aurora.
+    MeshPalette(listOf(Color(0xFF00C853), Color(0xFF00B8D4), Color(0xFF7C4DFF), Color(0xFF1A237E))),
+    // Grape and rose.
+    MeshPalette(listOf(Color(0xFFD500F9), Color(0xFFFF4081), Color(0xFF651FFF), Color(0xFF4A148C))),
+    // Gold.
+    MeshPalette(listOf(Color(0xFFFFB300), Color(0xFFFF5252), Color(0xFFF06292), Color(0xFF6D2E46))),
+)
+
+/**
+ * Steps through [palettes] for as long as the caller is composed, one every
+ * [stepMillis]. "Reduce animation" would make every step a snap, so there it
+ * stays on the first palette instead. While [running] is off it holds the
+ * palette it is on, and carries on from there once it is back.
+ */
+@Composable
+fun cyclingMeshPalette(
+    palettes: List<MeshPalette>,
+    stepMillis: Int = MESH_CYCLE_MILLIS,
+    running: Boolean = true,
+): MeshPalette {
+    val reduceAnimation by PlayerSettings.reduceAnimation.collectAsStateWithLifecycle()
+    var step by remember { mutableIntStateOf(0) }
+    LaunchedEffect(reduceAnimation, stepMillis, running) {
+        if (reduceAnimation || !running) return@LaunchedEffect
+        while (isActive) {
+            delay(stepMillis.toLong())
+            step++
+        }
+    }
+    return palettes[step % palettes.size]
 }
 
 /**
@@ -249,6 +326,13 @@ fun rememberArtworkColors(imageUrl: String?, canvasFrame: ImageBitmap? = null): 
  * that would land the blobs back where they started.
  */
 private const val DRIFT_RADIANS = (PI * 0.45f).toFloat()
+
+/**
+ * The player's four mesh colours for [bitmap], for surfaces that draw the mesh
+ * somewhere this code doesn't run — the watch app is sent these rather than
+ * running Palette on a watch.
+ */
+fun artworkMeshColors(bitmap: ImageBitmap): List<Color> = paletteOf(bitmap)
 
 /**
  * Four mesh colours drawn from the artwork.

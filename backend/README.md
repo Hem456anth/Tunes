@@ -126,6 +126,11 @@ Pass the party token in `Authorization: Bearer <token>` during the WebSocket
 handshake. Tokens are intentionally not accepted in the URL, which prevents
 them from being recorded in common HTTP access logs.
 
+A browser cannot set that header on a WebSocket, so the web player offers the
+token as a subprotocol instead: `Sec-WebSocket-Protocol: bitchord.v1,
+bitchord.token.<token>`. The server answers `bitchord.v1` and never echoes the
+token. The browser's `Origin` must be in `JAM_ALLOWED_ORIGINS`.
+
 Client → server:
 
 ```jsonc

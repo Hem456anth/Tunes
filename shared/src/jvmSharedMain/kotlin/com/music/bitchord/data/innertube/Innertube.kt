@@ -65,27 +65,25 @@ object Innertube {
     @Volatile
     var appLanguage: () -> String? = { null }
 
-    val currentLanguage: String
+    val currentLocaleTag: String
         get() {
             val raw = appLanguage()?.ifEmpty { null }
-                ?: Locale.getDefault().language.ifEmpty { "en" }
-            return when (raw.lowercase(Locale.ROOT)) {
-                "iw" -> "he"
-                "in" -> "id"
-                "ji" -> "yi"
-                else -> raw
-            }
+                ?: Locale.getDefault().toLanguageTag().ifEmpty { "en" }
+            return com.music.bitchord.data.LocaleTags.normalizeAppTag(raw)
         }
 
+    val currentLanguage: String
+        get() = com.music.bitchord.data.LocaleTags.ytHl(currentLocaleTag)
+
+    val currentRegion: String
+        get() = com.music.bitchord.data.LocaleTags.ytGl(currentLocaleTag)
+
+    /** [currentRegion] for search, where null lets YouTube place us — see [LocaleTags.ytSearchGl]. */
+    private val searchRegion: String?
+        get() = com.music.bitchord.data.LocaleTags.ytSearchGl(currentLocaleTag)
+
     private val acceptLanguageHeader: String
-        get() {
-            val lang = currentLanguage
-            return if (lang == "en") {
-                "en-US,en;q=0.9"
-            } else {
-                "$lang,en-US;q=0.8,en;q=0.7"
-            }
-        }
+        get() = com.music.bitchord.data.LocaleTags.acceptLanguage(currentLocaleTag)
 
     private const val MUSIC_BASE = "https://music.youtube.com/youtubei/v1"
     private const val MUSIC_ORIGIN = "https://music.youtube.com"
@@ -608,6 +606,19 @@ object Innertube {
         put("isAudioOnly", true)
     }
 
+    /**
+     * A watch queue started from a playlist rather than a track: a mix such as
+     * My Supermix, a playlist radio (`RDAMPL…`), or an artist's Mix / Shuffle
+     * button, which also carry their own seed [videoId] and [params].
+     */
+    suspend fun nextPlaylist(playlistId: String, videoId: String? = null, params: String? = null): JsonObject =
+        postMusic("next") {
+            videoId?.let { put("videoId", it) }
+            put("playlistId", playlistId)
+            params?.let { put("params", it) }
+            put("isAudioOnly", true)
+        }
+
     /** Timed caption transcript used as a last-resort lyrics source. */
     suspend fun transcript(videoId: String): JsonObject = postMusic("get_transcript") {
         // get_transcript expects a tiny protobuf: field 1, length, video id.
@@ -615,16 +626,24 @@ object Innertube {
         put("params", Base64.getEncoder().encodeToString(bytes))
     }
 
-    suspend fun search(query: String, params: String? = null): JsonObject =
-        postMusic("search") {
-            put("query", query)
-            params?.let { put("params", it) }
+    suspend fun search(query: String, params: String? = null, anonymous: Boolean = true): JsonObject =
+        if (anonymous) {
+            postMusicAnonymous("search", region = searchRegion) {
+                put("query", query)
+                params?.let { put("params", it) }
+            }
+        } else {
+            postMusic("search", region = searchRegion) {
+                put("query", query)
+                params?.let { put("params", it) }
+            }
         }
 
     /** The next page of a filtered search result. */
     suspend fun searchContinuation(token: String): JsonObject = postMusic(
         endpoint = "search",
         query = mapOf("ctoken" to token, "continuation" to token, "type" to "next"),
+        region = searchRegion,
     ) {
         put("continuation", token)
     }
@@ -639,7 +658,7 @@ object Innertube {
      * it affordable per keystroke where a search is not.
      */
     suspend fun searchSuggestions(input: String): JsonObject =
-        postMusic("music/get_search_suggestions") {
+        postMusic("music/get_search_suggestions", region = searchRegion) {
             put("input", input)
         }
 
@@ -655,7 +674,7 @@ object Innertube {
      * land as anonymous lookups that don't touch the user's account history.
      */
     suspend fun searchTypeahead(query: String): JsonObject =
-        postMusicAnonymous("search") {
+        postMusicAnonymous("search", region = searchRegion) {
             put("query", query)
         }
 
@@ -812,8 +831,8 @@ object Innertube {
             parameter("cbrver", "141.0.0.0")
             parameter("cos", "Windows")
             parameter("cosver", "10.0")
-            parameter("hl", "en_US")
-            parameter("cr", "US")
+            parameter("hl", currentLanguage.replace('-', '_'))
+            parameter("cr", currentRegion)
             extras()
             statsHeaders(session)
         }.status.value
@@ -1096,6 +1115,8 @@ object Innertube {
     private suspend fun postMusic(
         endpoint: String,
         query: Map<String, String> = emptyMap(),
+        /** The context's `gl`; null sends none. */
+        region: String? = currentRegion,
         bodyExtras: JsonObjectBuilder.() -> Unit,
     ): JsonObject {
         // This is the common authenticated request path: Home, Library,
@@ -1137,7 +1158,7 @@ object Innertube {
                                 put("clientName", "WEB_REMIX")
                                 put("clientVersion", clientVersion)
                                 put("hl", currentLanguage)
-                                put("gl", "US")
+                                region?.let { put("gl", it) }
                                 visitorData?.let { put("visitorData", it) }
                             }
                             putJsonObject("user") {
@@ -1173,6 +1194,8 @@ object Innertube {
      */
     private suspend fun postMusicAnonymous(
         endpoint: String,
+        /** The context's `gl`; null sends none. */
+        region: String? = currentRegion,
         bodyExtras: JsonObjectBuilder.() -> Unit,
     ): JsonObject {
         val clientVersion = webRemixVersion
@@ -1185,6 +1208,8 @@ object Innertube {
                 header("Referer", "$MUSIC_ORIGIN/")
                 header("X-YouTube-Client-Name", WEB_REMIX_CLIENT_ID)
                 header("X-YouTube-Client-Version", clientVersion)
+                header("Accept-Language", acceptLanguageHeader)
+                parameter("hl", currentLanguage)
                 visitorData?.let { header("X-Goog-Visitor-Id", it) }
                 // No Cookie / Authorization headers — anonymous request.
                 setBody(
@@ -1193,8 +1218,8 @@ object Innertube {
                             putJsonObject("client") {
                                 put("clientName", "WEB_REMIX")
                                 put("clientVersion", clientVersion)
-                                put("hl", "en")
-                                put("gl", "US")
+                                put("hl", currentLanguage)
+                                region?.let { put("gl", it) }
                                 visitorData?.let { put("visitorData", it) }
                             }
                             putJsonObject("user") {

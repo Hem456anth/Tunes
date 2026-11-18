@@ -102,7 +102,7 @@ private fun SkeletonLine(fraction: Float, height: Dp, modifier: Modifier = Modif
  * come back without a subtitle, and guessing wrong shifts everything under it.
  */
 @Composable
-private fun SectionHeaderSkeleton(index: Int = 0) {
+fun SectionHeaderSkeleton(index: Int = 0) {
     Column(Modifier.padding(horizontal = PAGE_GUTTER, vertical = 10.dp)) {
         SkeletonLine(fraction = TitleWidths[index % TitleWidths.size] * 0.7f, height = 18.dp)
     }
@@ -144,68 +144,21 @@ fun LazyListScope.songListSkeleton(
     }
 }
 
-/**
- * The lead shelf on Home and Explore: near-page-width cards that page sideways.
- *
- * Both carousels below are built on a [LazyRow] with scrolling off rather than a
- * plain [Row], so a card running past the right edge is measured and clipped
- * exactly as the real shelf's is — which is the whole point of a skeleton.
- */
-@Composable
-private fun HeroShelfSkeleton() {
-    Column(Modifier.padding(bottom = 26.dp)) {
-        SectionHeaderSkeleton()
-        BoxWithConstraints {
-            val cardWidth = heroCardWidth(maxWidth)
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                userScrollEnabled = false,
-            ) {
-                items(2) {
-                    ShimmerBox(
-                        modifier = Modifier.width(cardWidth).aspectRatio(HERO_CARD_RATIO),
-                        shape = RoundedCornerShape(18.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Reserved at the top of Play while Recents loads, matching its saved layout. */
-fun LazyListScope.recentlyPlayedSkeleton(listLayout: Boolean) {
+/** Reserved at the top of Play while Recents loads. */
+fun LazyListScope.recentlyPlayedSkeleton() {
     item(key = "skeleton:recently-played") {
         Column(Modifier.padding(bottom = 26.dp)) {
             RecentsHeaderSkeleton()
-            if (listLayout) {
-                BoxWithConstraints {
-                    val columnWidth = trackColumnWidth(maxWidth)
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        userScrollEnabled = false,
-                    ) {
-                        item {
-                            Column(Modifier.width(columnWidth)) {
-                                repeat(4) { index -> CompactSongRowSkeleton(index) }
-                            }
-                        }
-                    }
-                }
-            } else {
-                BoxWithConstraints {
-                    val cardWidth = heroCardWidth(maxWidth)
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        userScrollEnabled = false,
-                    ) {
-                        items(2) {
-                            ShimmerBox(
-                                modifier = Modifier.width(cardWidth).aspectRatio(HERO_CARD_RATIO),
-                                shape = RoundedCornerShape(18.dp),
-                            )
+            BoxWithConstraints {
+                val columnWidth = trackColumnWidth(maxWidth)
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = PAGE_GUTTER),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    userScrollEnabled = false,
+                ) {
+                    item {
+                        Column(Modifier.width(columnWidth)) {
+                            repeat(4) { index -> CompactSongRowSkeleton(index) }
                         }
                     }
                 }
@@ -214,7 +167,7 @@ fun LazyListScope.recentlyPlayedSkeleton(listLayout: Boolean) {
     }
 }
 
-/** Recents heading plus the adjacent list/grid toggle placeholder. */
+/** Recents heading placeholder. */
 @Composable
 private fun RecentsHeaderSkeleton() {
     Row(
@@ -226,12 +179,16 @@ private fun RecentsHeaderSkeleton() {
         Box(Modifier.weight(1f)) {
             SkeletonLine(fraction = TitleWidths.first() * 0.7f, height = 18.dp)
         }
-        Spacer(Modifier.width(8.dp))
-        ShimmerBox(Modifier.size(32.dp), CircleShape)
     }
 }
 
-/** The compact carousel of square cards used by every shelf below the first. */
+/**
+ * The compact carousel of square cards.
+ *
+ * Built on a [LazyRow] with scrolling off rather than a plain [Row], so a card
+ * running past the right edge is measured and clipped exactly as the real
+ * shelf's is — which is the whole point of a skeleton.
+ */
 @Composable
 fun ShelfSkeleton(index: Int = 0, cardWidth: Dp = SHELF_CARD_WIDTH, cardCorner: Dp = 12.dp) {
     Column(Modifier.padding(bottom = 26.dp)) {
@@ -258,16 +215,9 @@ fun ShelfSkeleton(index: Int = 0, cardWidth: Dp = SHELF_CARD_WIDTH, cardCorner: 
 }
 
 /** Home and Explore while the first page of shelves is still loading. */
-fun LazyListScope.feedSkeleton(shelves: Int = 3, firstIsHero: Boolean = true) {
-    if (firstIsHero) {
-        item(key = "skeleton:hero") { HeroShelfSkeleton() }
-        items(shelves - 1, key = { "skeleton:shelf:$it" }) { index ->
-            ShelfSkeleton(index = index + 1)
-        }
-    } else {
-        items(shelves, key = { "skeleton:shelf:$it" }) { index ->
-            ShelfSkeleton(index = index)
-        }
+fun LazyListScope.feedSkeleton(shelves: Int = 3) {
+    items(shelves, key = { "skeleton:shelf:$it" }) { index ->
+        ShelfSkeleton(index = index)
     }
 }
 
