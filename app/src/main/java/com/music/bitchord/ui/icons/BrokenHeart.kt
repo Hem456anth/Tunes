@@ -11,13 +11,13 @@ import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.graphics.vector.path
-import com.composables.sfsymbols.SfSymbols
-import com.composables.sfsymbols.monochrome.SFHeart
-import com.composables.sfsymbols.monochrome.SFHeartFill
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 
 /**
- * A broken heart, for Dislike: SF Symbols has a heart with a slash through it
- * but no broken one, so this is the SF heart split down the middle along a
+ * A broken heart, for Dislike: the Material heart (Tunes draws Material icons,
+ * not SF Symbols — see [SfIcons]) split down the middle along a
  * zigzag crack, the two halves pulled a hair apart. Drawn a little lighter
  * than the menus' other symbols: two halves and a crack are more line than
  * one heart, and at Bold they read as a blot.
@@ -26,10 +26,10 @@ import com.composables.sfsymbols.monochrome.SFHeartFill
  * piece rather than a ring with two nicks taken out of it.
  */
 object BrokenHeart {
-    val Outline: ImageVector by lazy { broken(SfSymbols.Monochrome.SFHeart, "bc_broken_heart", outline = true) }
-    val Fill: ImageVector by lazy { broken(SfSymbols.Monochrome.SFHeartFill, "bc_broken_heart_fill", outline = false) }
+    val Outline: ImageVector by lazy { broken(Icons.Rounded.FavoriteBorder, "bc_broken_heart", outline = true) }
+    val Fill: ImageVector by lazy { broken(Icons.Rounded.Favorite, "bc_broken_heart_fill", outline = false) }
 
-    /** Added to Apple's Regular line — about half what [SfIcons] adds for Bold. */
+    /** Added to the heart's own line — about what [SfIcons] adds. */
     private const val WEIGHT = 0.35f
 
     /** Half the gap between the two halves, in the heart's own units. */
@@ -45,7 +45,7 @@ object BrokenHeart {
         0f to 26f,
     )
 
-    /** [regular] is Apple's own Regular heart, outline or filled. */
+    /** [regular] is the Material heart, outline or filled. */
     private fun broken(regular: ImageVector, name: String, outline: Boolean): ImageVector {
         // Padded the way [SfIcons] pads its symbols.
         val pad = SfIcons.BOLD_STROKE / 2f
@@ -107,10 +107,10 @@ object BrokenHeart {
                 }
             }
         }
-        collect(SfSymbols.Monochrome.SFHeartFill.root)
+        collect(Icons.Rounded.Favorite.root)
         return nodes.ifEmpty { addPathNodes("") }
     }
 
-    /** SF's Regular heart outline, in its own units. */
-    private const val REGULAR_LINE = 1.73f
+    /** The Material heart outline's line, in its own units. */
+    private const val REGULAR_LINE = 2f
 }
