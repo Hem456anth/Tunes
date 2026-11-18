@@ -12,8 +12,8 @@
 </div>
 
 Tunes is free software under the GNU General Public License v3.0; see `LICENSE`.
-The Android app covers playback, downloads, Automix, lyrics, Replay, widgets, Android Auto,
-scrobbling, Discord, local files, Spotify, Chromecast, Music Transfer and sign-in. The repository also holds **Tunes for Chrome**, a side-panel
+The Android app covers playback, downloads, Automix, lyrics, podcasts, music videos, Replay,
+widgets, Android Auto, scrobbling, Discord, local files, Spotify, Chromecast, Music Transfer and sign-in. The repository also holds **Tunes for Chrome**, a side-panel
 player extension (see [`extension/`](extension/README.md)).
 
 ## Screenshots
@@ -38,6 +38,15 @@ player extension (see [`extension/`](extension/README.md)).
   Certificate SHA-256: `963fa6cdbcedd9d6970b37acb42c28674b45b6215fa62bde799b2ac6eeb1f067`
 
 ## What's new
+
+### 3.2.0 (coming soon)
+- Built on **BitChord v1.9.1**: bit-perfect output to USB DACs, music videos in the player,
+  YouTube Music podcasts, Top Picks for You, a mix view for Automix, a better offline player with
+  folders and device playlists, and a redesigned player, menus and Settings.
+- Back always goes to the page you came from, across Settings, Library and release pages.
+- Settings and menu icons are now Material icons.
+- Tunes keeps its own touches: the 3.0 Explore and Search, Continue from Chrome, Music Transfer and
+  stop-on-swipe-away.
 
 ### 3.1.2 (19 Oct 2026)
 - **Music Transfer** (Settings → Music Transfer): bring liked songs, playlists, saved albums and
@@ -72,7 +81,7 @@ player extension (see [`extension/`](extension/README.md)).
 ## Highlights
 
 - **Identity:** package `app.tunes.music` (dev flavor `app.tunes.music.dev`),
-  name "Tunes", version 3.1.2 (versionCode 7), blue logomark and launcher icon. Installs
+  name "Tunes", version 3.2.0 (versionCode 8), blue logomark and launcher icon. Installs
   over every earlier Tunes release (same signing key). Internal Kotlin package names are
   unchanged.
 - **Blue instead of red:** every red button and accent (delete, sign out, remove

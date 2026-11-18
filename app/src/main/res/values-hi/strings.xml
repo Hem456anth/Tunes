@@ -174,10 +174,13 @@
     <string name="japanese">जापानी</string>
     <string name="russian">रूसी</string>
     <string name="chinese">चीनी (सरलीकृत)</string>
+    <string name="chinese_simplified">चीनी (सरलीकृत)</string>
+    <string name="chinese_traditional">चीनी (पारंपरिक)</string>
     <string name="hebrew">हिब्रू</string>
     <string name="italian">इतालवी</string>
     <string name="turkish">तुर्की</string>
     <string name="thai">थाई</string>
+    <string name="korean">कोरियाई</string>
     <string name="show_all">सभी देखें</string>
     <string name="grid_view">ग्रिड</string>
     <string name="list_view">लिस्ट</string>
@@ -209,6 +212,8 @@
     <string name="reduce_animation_subtitle">मुख्य प्लेयर के ग्रेडिएंट को बहने के बजाय स्थिर रखता है</string>
     <string name="reduce_dynamic_blur">डायनामिक ब्लर कम करें</string>
     <string name="reduce_dynamic_blur_subtitle">पूरे ऐप में फ्रॉस्टेड ग्लास की जगह ठोस रंग लगाता है</string>
+    <string name="disable_blend_effects">ब्लेंड इफ़ेक्ट बंद करें</string>
+    <string name="disable_blend_effects_subtitle">प्लेयर आइकन, टेक्स्ट और डार्क मेनू को आर्टवर्क के रंग में रंगने के बजाय सादे सफ़ेद में दिखाता है</string>
     <string name="full_screen_cover_art">फ़ुल-स्क्रीन कवर आर्ट</string>
     <string name="animated_cover_art">एनिमेटेड कवर आर्ट</string>
     <string name="synced_lyrics">सिंक किए गए लिरिक्स</string>
@@ -225,6 +230,8 @@
     <string name="stop_music_on_close_subtitle">ऐप को हाल के ऐप्स से हटाने पर प्लेबैक रोक देता है</string>
     <string name="hide_volume_bar">वॉल्यूम बार छिपाएं</string>
     <string name="hide_volume_bar_subtitle">मुख्य प्लेयर से वॉल्यूम स्लाइडर हटा देता है</string>
+    <string name="hide_status_bar_in_player">प्लेयर में स्टेटस बार छिपाएं</string>
+    <string name="hide_status_bar_in_player_subtitle">मुख्य प्लेयर खुला रहने पर घड़ी, बैटरी और नोटिफ़िकेशन आइकन छिपा देता है</string>
     <string name="hide_song_status">गाने का स्टेटस छिपाएँ</string>
     <string name="hide_song_status_subtitle">मुख्य प्लेयर में “यहाँ से चल रहा है” या “इन्होंने चलाया” टेक्स्ट छिपाता है</string>
     <string name="off">बंद</string>
@@ -237,6 +244,8 @@
     <string name="light">लाइट</string>
     <string name="dark">डार्क</string>
     <string name="full_screen_cover_art_subtitle">चौकोर स्लीव के बजाय कवर को प्लेयर के किनारों तक ले जाता है</string>
+    <string name="full_screen_detail_cover">फ़ुल-स्क्रीन एल्बम/प्लेलिस्ट कवर</string>
+    <string name="full_screen_detail_cover_subtitle">एल्बम और प्लेलिस्ट कवर को फ़्रेम के बजाय पेज के किनारों तक ले जाता है</string>
     <string name="animated_cover_art_subtitle">स्थिर स्लीव के बजाय कुछ रिलीज़ में मौजूद लूपिंग वीडियो चलाता है</string>
     <string name="dont_repeat_songs_subtitle">ऑटोप्ले इस सेशन में पहले से चलाया या सुझाया गया गाना दोबारा सुझाव नहीं देगा</string>
     <string name="download_quality_subtitle">%1$s प्रति ट्रैक, कनेक्शन चाहे जो भी हो</string>
@@ -447,6 +456,8 @@
     <string name="signed_in_as">%1$s के रूप में साइन इन है</string>
     <string name="signing_in">साइन इन हो रहा है…</string>
     <string name="sleep_timer">स्लीप टाइमर</string>
+    <string name="sleep_timer_custom">कस्टम</string>
+    <string name="start_sleep_timer">टाइमर शुरू करें</string>
     <string name="sources_no_lossless">कोई भी चालू स्रोत लॉसलेस ऑडियो नहीं दे सकता। बिना ट्रांसकोडिंग के उपलब्ध लॉसलेस फ़ाइलें चलाने के लिए कस्टम मॉड्यूल जोड़ें।</string>
     <string name="sources_order_footer">अगर किसी स्रोत के पास कोई ट्रैक नहीं है या उस तक पहुंचा नहीं जा सकता, तो Tunes अगला स्रोत आज़माता है। YouTube से ऊपर के स्रोत बेहतर वर्शन मिलने पर उसकी रिकॉर्डिंग बदल सकते हैं।</string>
     <string name="sources_order_header">स्रोत, इसी क्रम में आज़माए जाते हैं</string>
@@ -458,10 +469,10 @@
     <string name="source_matching">स्रोत मिलान</string>
     <string name="upgrade_length_slack">ट्रैक लंबाई की छूट</string>
     <string name="upgrade_length_slack_subtitle">बदले जाने वाले स्ट्रीम के लिए अवधि का अधिकतम अंतर</string>
-    <string name="upgrade_length_slack_footer">ज़्यादा छूट से ज़्यादा स्रोत मिलान स्वीकार होते हैं; कम छूट ज़्यादा सख़्त है। डिफ़ॉल्ट 3 सेकंड है।</string>
+    <string name="upgrade_length_slack_footer">ज़्यादा छूट से ज़्यादा स्रोत मिलान स्वीकार होते हैं; कम छूट ज़्यादा सख़्त है। डिफ़ॉल्ट 5 सेकंड है।</string>
     <string name="seconds_short">%1$d से.</string>
     <string name="spdc_token">sp_dc टोकन</string>
-    <string name="spotify_canvas_setup">Spotify Canvas सेटअप</string>
+    <string name="spotify_canvas_setup">Spotify सेट अप करें</string>
     <string name="spotify_canvas_setup_description">Spotify Canvas इस्तेमाल करने के लिए, अपनी Spotify sp_dc कुकी दें।</string>
     <string name="spotify_canvas_setup_steps">1. ब्राउज़र में open.spotify.com पर साइन इन करें।\n2. Developer Tools खोलें, फिर Application और Cookies पर जाएं।\n3. sp_dc कुकी की वैल्यू कॉपी करें।\n4. इसे नीचे पेस्ट करें।</string>
     <string name="spotify_canvas_auto_hide">प्लेयर कंट्रोल अपने-आप छिपाएँ</string>
@@ -784,7 +795,6 @@
 
     <string name="addon_url_description">एडऑन का URL पेस्ट करें — रूट या manifest.json।</string>
 
-    <string name="advanced_options">उन्नत विकल्प</string>
 
     <string name="automix_mode_balanced">संतुलित</string>
 
@@ -843,10 +853,21 @@
     <string name="dolby_atmos_unavailable">यह डिवाइस Atmos का समर्थन नहीं करता, गाने सामान्य संस्करण में बजेंगे</string>
 
     <string name="export_compatible_downloads">संगत डाउनलोड निर्यात करें</string>
+    <string name="sync_downloaded_playlists">प्लेलिस्ट अपडेट रखें</string>
+    <string name="sync_downloaded_playlists_subtitle">दिन में दो बार जाँचता है और डाउनलोड की गई प्लेलिस्ट में जोड़े गए नए गाने डाउनलोड करता है</string>
+    <string name="playlist_sync_ask_title">%1$s में नए गाने: %2$d</string>
+    <string name="playlist_sync_ask_text">डाउनलोड करने के लिए टैप करें</string>
+    <string name="playlist_sync_done_title">%1$s में जोड़े गए: %2$d</string>
+    <string name="playlist_updates_channel">प्लेलिस्ट अपडेट</string>
 
-    <string name="legacy_mesh_gradient">क्लासिक मेश ग्रेडिएंट</string>
+    <string name="player_theme">प्लेयर थीम</string>
+    <string name="player_theme_default">डिफ़ॉल्ट</string>
+    <string name="player_theme_legacy">पुराना</string>
+    <string name="player_theme_simple">सरल</string>
+    <string name="player_theme_default_subtitle">कवर के रंग उसके नीचे तक फैलते हैं</string>
+    <string name="player_theme_simple_subtitle">पूरे प्लेयर के पीछे धुंधला कवर</string>
 
-    <string name="legacy_mesh_gradient_subtitle">v1.5 से प्लेयर के पीछे बहने वाले रंग लौटाएं</string>
+    <string name="player_theme_legacy_subtitle">v1.5 से प्लेयर के पीछे बहने वाले रंग लौटाएं</string>
 
     <string name="liquid_glass">लिक्विड ग्लास</string>
 
@@ -1053,9 +1074,17 @@
 
     <string name="settings_search_empty">No settings match “%1$s”</string>
 
-    <string name="prefer_music_only">Prefer music-only version</string>
 
-    <string name="prefer_music_only_subtitle">For music videos, show the video details while finding and loading the catalogue audio version</string>
+    <string name="content_preferences">Content Preferences</string>
+    <string name="hide_recents">Hide Recents</string>
+    <string name="hide_home_videos">Hide videos from Home</string>
+    <string name="hide_home_videos_subtitle">Shelves of only videos go too. Search, artists and playlists still show them</string>
+    <string name="hide_top_picks">Hide Top Picks for You</string>
+    <string name="hide_home_moods">Hide Find Your Mood</string>
+    <string name="square_video_thumbnails">Square video thumbnails</string>
+    <string name="square_video_thumbnails_subtitle">Show music videos as squares everywhere, including the player</string>
+    <string name="prefer_music_only">Prefer music-only version</string>
+    <string name="prefer_music_only_subtitle">Music videos play as their audio version, and the next track in the queue is converted ahead of time so Automix and crossfade work</string>
     <string name="smart_version_alignment">स्मार्ट ऑडियो अलाइनमेंट</string>
     <string name="smart_version_alignment_subtitle">ठीक मेल खाने वाला प्लेबैक पल ढूँढने के लिए ऑडियो वेवफ़ॉर्म का विश्लेषण करता है</string>
 
@@ -1244,14 +1273,21 @@
 
 
     <string name="source_needs_lossless_output">लॉसलेस आउटपुट चाहिए · लॉसलेस सपोर्ट करने वाला डिवाइस इस्तेमाल करें</string>
+    <string name="source_needs_update">यह ऐडऑन पुराना है। यह अभी भी काम करता है, लेकिन इसके डेवलपर से कहें कि वे BitChord के नए ऐडऑन डॉक्स के अनुसार इसे अपडेट करें।</string>
+    <string name="source_outdated">पुराना ऐडऑन</string>
     <string name="source_needs_lossless_bt_codec">लॉसलेस आउटपुट चाहिए · Bluetooth %1$s पर है; लॉसलेस सपोर्ट करने वाला डिवाइस इस्तेमाल करें</string>
     <string name="source_needs_lossless_bt_unknown">लॉसलेस आउटपुट चाहिए · पता नहीं चल रहा कि कौन-सा Bluetooth कोडेक चल रहा है</string>
+    <string name="source_downloads_on">डाउनलोड की अनुमति है</string>
     <string name="source_downloads_off">सिर्फ़ स्ट्रीमिंग</string>
     <string name="lossless_output_permission">Bluetooth कोडेक जाँचें</string>
     <string name="lossless_output_permission_detail">आस-पास के डिवाइस की अनुमति दें ताकि LDAC या LHDC हेडफ़ोन लॉसलेस ऐड-ऑन खोल सकें</string>
     <string name="cached_songs">कैश किए गए गाने</string>
     <string name="cached_songs_subtitle">सॉन्ग कैश में YouTube और JioSaavn के गाने</string>
     <string name="cached_songs_empty">अभी कोई कैश किया गया गाना नहीं है। YouTube या JioSaavn से चलाए गए गाने यहाँ दिखेंगे।</string>
+    <string name="cached_song_partial">आंशिक</string>
+    <string name="remove_from_cache">कैश से हटाएँ</string>
+    <string name="cached_song_remove">हटाएँ</string>
+    <string name="removed_from_cache">गाने के कैश से हटाया गया</string>
     <string name="show_cache_folder">कैश किए गए गानों का फ़ोल्डर दिखाएँ</string>
     <string name="show_cache_folder_subtitle">लाइब्रेरी में सॉन्ग कैश में रखे YouTube और JioSaavn गानों का फ़ोल्डर जोड़ता है</string>
     <string name="song_cache_unlimited">असीमित</string>
@@ -1287,5 +1323,143 @@
     <string name="spotify_import_unmatched">%1$d गाने YouTube Music पर नहीं मिले</string>
     <string name="spotify_library_subtitle">आपकी Spotify प्लेलिस्ट</string>
     <string name="spotify_sign_in">Spotify से साइन इन करें</string>
+    <string name="spotify_use_spdc_token">sp_dc टोकन इस्तेमाल करें</string>
     <string name="spotify_track_unavailable">वह गाना YouTube Music पर नहीं मिला</string>
+    <string name="artist_signatures">कलाकारों के हस्ताक्षर</string>
+    <string name="artist_signatures_subtitle">Apple Music में शीर्षक लोगो न होने पर हस्तलिखित हस्ताक्षर दिखाता है</string>
+    <string name="artist_signatures_url">हस्ताक्षर API URL</string>
+    <string name="artist_signatures_url_hint">https://signatures.example.com</string>
+    <string name="artist_signatures_unconfigured">कॉन्फ़िगर नहीं है — API URL सेट करने के लिए टैप करें</string>
+    <string name="artist_signatures_test_failed">उस URL पर API तक नहीं पहुंचा जा सका</string>
+    <string name="search_source_addons">ऐडऑन</string>
+    <string name="search_addons_none">कोई ऐडऑन चालू नहीं है। सेटिंग → स्रोत में जाकर एक जोड़ें।</string>
+    <string name="app_icon">ऐप आइकन</string>
+    <string name="app_icon_default">डिफ़ॉल्ट</string>
+    <string name="show_queue_history">कतार का इतिहास दिखाएँ</string>
+    <string name="show_queue_history_subtitle">कतार में “अभी चल रहा है” के ऊपर पहले चले 25 तक गाने दिखाएँ</string>
+    <string name="not_enough_this_week">अपना Replay अनलॉक करने के लिए इस हफ़्ते कुछ और गाने सुनें।</string>
+    <string name="replay_artist_start_week">पूरे हफ़्ते, </string>
+    <string name="replay_songs_end_week"> ने आपका हफ़्ता भर दिया।</string>
+    <string name="replay_summary_end_week">हफ़्ता</string>
+    <string name="replay_this_week">इस हफ़्ते</string>
+    <string name="replay_period_weekly">साप्ताहिक</string>
+    <string name="replay_period_monthly">मासिक</string>
+    <string name="replay_period_yearly">वार्षिक</string>
+    <string name="replay_period_lifetime">सर्वकालिक</string>
+    <string name="onboarding_title">लाखों गाने, Tunes पर स्ट्रीम करें</string>
+    <string name="onboarding_name_prompt">हम आपको क्या कहकर बुलाएँ?</string>
+    <string name="onboarding_name_hint">आपका नाम</string>
+    <string name="onboarding_name_footer">साथ सुनें इस्तेमाल करने पर दोस्तों को यह दिखता है। इसे बाद में सेटिंग में बदला जा सकता है।</string>
+    <string name="onboarding_next">आगे</string>
+    <string name="onboarding_connect_title">अपना YouTube खाता कनेक्ट करें</string>
+    <string name="onboarding_connect_body">अपनी लाइब्रेरी, प्लेलिस्ट और मिक्स साथ लाएँ, और दोस्तों के साथ साथ सुनें पार्टी शुरू करें।</string>
+    <string name="onboarding_sign_in_google">Google से साइन इन करें</string>
+    <string name="onboarding_skip_sign_in">साइन इन छोड़ें</string>
+    <string name="onboarding_back">वापस</string>
+    <string name="wear_os_section">Wear OS के लिए Tunes</string>
+    <string name="wear_os_page_title">Wear OS</string>
+    <string name="wear_os_your_watches">आपकी घड़ियाँ</string>
+    <string name="wear_os_value_none">कोई घड़ी नहीं</string>
+    <string name="wear_os_value_not_installed">इंस्टॉल नहीं है</string>
+    <string name="wear_os_value_up_to_date">अप-टू-डेट</string>
+    <string name="wear_os_looking">घड़ियाँ खोजी जा रही हैं…</string>
+    <string name="wear_os_no_watch">कोई घड़ी कनेक्ट नहीं है</string>
+    <string name="wear_os_no_watch_subtitle">पहले Wear OS घड़ी को उसके कंपेनियन ऐप में इस फ़ोन से पेयर करें।</string>
+    <string name="wear_os_checking">जाँच हो रही है…</string>
+    <string name="wear_os_not_installed">Tunes इस घड़ी पर नहीं है</string>
+    <string name="wear_os_up_to_date">अप-टू-डेट · %1$s</string>
+    <string name="wear_os_update_available">अपडेट उपलब्ध है</string>
+    <string name="wear_os_unknown">इंस्टॉल है · वर्शन की जाँच नहीं हो सकी</string>
+    <string name="wear_os_sending">आपकी घड़ी पर भेजा जा रहा है…</string>
+    <string name="wear_os_sent">भेज दिया — घड़ी पूछे तो उसी पर पूरा करें</string>
+    <string name="wear_os_send_failed">अपडेट नहीं भेजा जा सका (%1$s)</string>
+    <string name="wear_os_install">इंस्टॉल करें</string>
+    <string name="wear_os_update">अपडेट करें</string>
+    <string name="wear_os_install_title">अपनी घड़ी पर इंस्टॉल करें</string>
+    <string name="wear_os_step_wifi">घड़ी को इस फ़ोन वाले Wi-Fi से ही कनेक्ट करें।</string>
+    <string name="wear_os_step_developer">घड़ी में डेवलपर विकल्प चालू करें। Galaxy Watch: सेटिंग → घड़ी के बारे में → सॉफ़्टवेयर जानकारी → सॉफ़्टवेयर वर्शन पर पाँच बार टैप करें। Pixel Watch: सेटिंग → सिस्टम → के बारे में → बिल्ड नंबर पर सात बार टैप करें।</string>
+    <string name="wear_os_step_debugging">डेवलपर विकल्प में ADB डीबगिंग और वायरलेस डीबगिंग चालू करें।</string>
+    <string name="wear_os_step_pair">नया डिवाइस पेयर करें पर टैप करें, फिर घड़ी पर दिखा छह अंकों का कोड डालें।</string>
+    <string name="wear_os_searching">Wi-Fi पर आपकी घड़ी खोजी जा रही है…</string>
+    <string name="wear_os_found">आपकी घड़ी मिल गई</string>
+    <string name="wear_os_pairing">पेयर हो रहा है…</string>
+    <string name="wear_os_installing">आपकी घड़ी पर Tunes इंस्टॉल हो रहा है…</string>
+    <string name="wear_os_installed">इंस्टॉल हो गया। अब आप वायरलेस डीबगिंग फिर से बंद कर सकते हैं।</string>
+    <string name="wear_os_failed">यह काम नहीं किया (%1$s)। कोड जाँचें और फिर कोशिश करें।</string>
+    <string name="wear_os_unsupported">घड़ी पर इंस्टॉल करने के लिए इस फ़ोन में Android 11 या उसके बाद का वर्शन चाहिए।</string>
+    <string name="wear_os_code_hint">पेयरिंग कोड</string>
+    <string name="wear_os_done">हो गया</string>
+    <string name="signed_by">%1$s द्वारा हस्ताक्षरित</string>
+    <string name="song_info">गाने की जानकारी</string>
+    <string name="song_info_album">एल्बम</string>
+    <string name="song_info_release_date">रिलीज़ की तारीख</string>
+    <string name="song_info_views">प्ले / व्यू</string>
+    <string name="song_info_likes">पसंद</string>
+    <string name="song_info_comments">टिप्पणियाँ</string>
+    <string name="song_info_unavailable">उपलब्ध नहीं</string>
+    <string name="song_info_error">कुछ जानकारी लोड नहीं हो सकी।</string>
+    <string name="song_info_retry">फिर से कोशिश करें</string>
+    <string name="no_audio_version">No audio version found for this video</string>
+    <string name="no_video_version">No video version found for this song</string>
+    <string name="version_switch_in_party">Everyone in Listen Together hears the same version</string>
+    <string name="opened_file">खोली गई फ़ाइल</string>
+    <string name="folders">फ़ोल्डर</string>
+    <string name="folder">फ़ोल्डर</string>
+    <string name="no_local_folders">संगीत वाला कोई फ़ोल्डर नहीं</string>
+    <string name="offline_playlist_empty">यह प्लेलिस्ट अभी खाली है। गानों के मेनू से उन्हें जोड़ें।</string>
+    <string name="offline_liked_empty">इस डिवाइस पर पसंद किए गए गाने यहाँ दिखेंगे</string>
+    <string name="saved_on_this_device">इस डिवाइस पर सेव किया गया</string>
+    <string name="direct_source_stream_in_party">Listen Together पार्टी के दौरान बंद</string>
+    <string name="direct_source_stream">स्रोत से सीधी स्ट्रीम</string>
+    <string name="find_your_mood">अपना मूड खोजें</string>
+    <string name="progressive_blur">क्रमिक ब्लर</string>
+    <string name="glass_performance">ग्लास के लिए बेहतर परफ़ॉर्मेंस</string>
+    <string name="remove_from_history">इतिहास से हटाएँ</string>
+    <string name="remove_from_history_failed">इतिहास से नहीं हटाया जा सका</string>
+    <string name="addon_blocked_title">यह गाना नहीं चल सकता</string>
+    <string name="addon_blocked_quality">%1$s पर ऑडियो क्वालिटी %2$s पर सेट है। %3$s के गाने सिर्फ़ लॉसलेस में चलते हैं — इसे चलाने के लिए सेटिंग्स → ऑडियो क्वालिटी में बदलें।</string>
+    <string name="addon_blocked_watch">संगीत आपकी घड़ी से चल रहा है, जो ऑडियो को लॉसलेस से नीचे सीमित करती है। फ़ोन पर संगीत वापस आते ही %1$s के गाने फिर चलेंगे।</string>
+    <string name="download_addon_left_out_title">%1$s के बिना डाउनलोड हो रहा है</string>
+    <string name="download_addon_not_allowed">%1$s डाउनलोड की अनुमति नहीं देता, इसलिए आपके गाने आपके दूसरे सोर्स से सेव हो रहे हैं।</string>
+    <string name="download_addon_needs_lossless_output">%1$s सिर्फ़ तभी संगीत देता है जब वायर्ड, USB या LDAC-क्लास हेडफ़ोन जुड़े हों। जब तक कोई न जुड़े, डाउनलोड इसे छोड़ देते हैं, इसलिए आपके गाने आपके दूसरे सोर्स से सेव हो रहे हैं।</string>
+    <string name="show_listen_together_button">साथ में सुनें बटन दिखाएँ</string>
+    <string name="show_listen_together_button_subtitle">बंद होने पर, प्लेयर लिरिक्स और कतार के बीच सिर्फ़ ऑडियो आउटपुट बटन दिखाता है</string>
+    <string name="font">फ़ॉन्ट</string>
+    <string name="font_default">डिफ़ॉल्ट</string>
+    <string name="font_legacy">पुराना</string>
+    <string name="font_default_subtitle">SF Pro Display · Apple Music जैसा वज़न</string>
+    <string name="font_legacy_subtitle">SF Pro Display · मूल मोटा वज़न</string>
+    <string name="font_footer">पुराना विकल्प वह मोटा और सटा हुआ फ़ॉन्ट वापस लाता है जो ऐप Apple Music से मिलाए जाने से पहले इस्तेमाल करता था।</string>
+    <string name="bit_perfect_output">बिट-परफ़ेक्ट आउटपुट</string>
+    <string name="bit_perfect_bypassed_footer">बिट-परफ़ेक्ट आउटपुट तैयार है, इसलिए धुंधली सेटिंग्स बायपास हैं और Dolby Atmos वर्शन नहीं माँगे जाते। DAC डिस्कनेक्ट होने या मोड बंद होने पर ये फिर से काम करेंगी।</string>
+    <string name="bit_perfect_sheet_warning">ट्रैक को बिना बदलाव DAC पर भेजता है। इक्वलाइज़र, लाउडनेस नॉर्मलाइज़ेशन, क्रॉसफ़ेड, ऑटोमिक्स, प्लेबैक स्पीड और Tunes का वॉल्यूम बायपास हो जाते हैं।</string>
+    <string name="bit_perfect_mode_off_subtitle">ऑडियो Android के मिक्सर और Tunes के इफ़ेक्ट से होकर जाता है।</string>
+    <string name="bit_perfect_mode_usb_android">USB DAC</string>
+    <string name="bit_perfect_mode_usb_android_subtitle">Android 14 हर ट्रैक के अपने रेट और बिट डेप्थ पर DAC खोलता है, बिना मिक्सिंग या रीसैंपलिंग के।</string>
+    <string name="bit_perfect_requires_android_14">Android 14 या उसके बाद का वर्शन चाहिए</string>
+    <string name="bit_perfect_mode_dap_exclusive">बिल्ट-इन DAC (AAudio एक्सक्लूसिव)</string>
+    <string name="bit_perfect_mode_dap_exclusive_subtitle">अपने DAC वाले म्यूज़िक प्लेयर के लिए। हर ट्रैक के अपने रेट पर हेडफ़ोन या लाइन आउटपुट को एक्सक्लूसिव रूप से खोलता है। हर डिवाइस एक्सक्लूसिव मोड नहीं देता।</string>
+    <string name="bit_perfect_requires_android_8_1">Android 8.1 या उसके बाद का वर्शन चाहिए</string>
+    <string name="bit_perfect_mode_usb_direct">USB DAC (डायरेक्ट ड्राइवर)</string>
+    <string name="bit_perfect_mode_usb_direct_subtitle">Tunes किसी भी Android वर्शन पर DAC को खुद चलाता है और वॉल्यूम DAC पर ही सेट करता है। USB अनुमति माँगता है। सामान्य आउटपुट से काफ़ी तेज़ हो सकता है।</string>
+    <string name="dac_volume">DAC वॉल्यूम</string>
+    <string name="dac_volume_subtitle">DAC पर ही सेट होता है; म्यूज़िक को स्केल नहीं किया जाता</string>
+    <string name="usb_allow_fixed_volume">बिना वॉल्यूम कंट्रोल वाले DAC की अनुमति दें</string>
+    <string name="usb_allow_fixed_volume_subtitle">वरना ऐसा DAC सामान्य आउटपुट से चलेगा</string>
+    <string name="usb_allow_fixed_volume_confirm_title">फ़ुल स्केल पर चलाएँ?</string>
+    <string name="usb_allow_fixed_volume_confirm_message">Tunes इस तरह के DAC का वॉल्यूम सेट नहीं कर सकता, इसलिए यह फ़ुल स्केल पर चलता है और सिर्फ़ DAC का अपना नॉब, अगर हो, आवाज़ नियंत्रित करता है। संवेदनशील हेडफ़ोन पर यह ख़तरनाक रूप से तेज़ हो सकता है।</string>
+    <string name="convert_for_limited_dac">कम क्षमता वाले DAC के लिए बदलें</string>
+    <string name="convert_for_limited_dac_subtitle">आपके DAC की सीमा से ऊपर के ट्रैक को उसके सबसे ऊँचे फ़ॉर्मैट में बदलता है। ट्रैक शुरू होने में ज़्यादा समय लग सकता है और वे मूल के मुकाबले बिट-परफ़ेक्ट नहीं होंगे।</string>
+    <string name="bit_perfect_confirm_title">बिट-परफ़ेक्ट आउटपुट चालू करें?</string>
+    <string name="bit_perfect_confirm_message">DAC को म्यूज़िक फ़ुल स्केल पर मिलता है, और फ़ोन के वॉल्यूम बटन काम करना बंद कर सकते हैं। चलाने से पहले DAC या एम्पलीफ़ायर की आवाज़ कम कर लें।</string>
+    <string name="bit_perfect_status_active">%1$s · %2$s kHz · %3$d-बिट</string>
+    <string name="bit_perfect_status_dac_limited">%1$s · %2$s kHz · %3$d-बिट · DAC की अधिकतम सीमा, इस ट्रैक के फ़ॉर्मैट से बदला गया</string>
+    <string name="bit_perfect_status_inexact">%1$s · सटीक नहीं: यह सोर्स लॉसलेस PCM नहीं है</string>
+    <string name="bit_perfect_status_waiting">समर्थित आउटपुट पर लॉसलेस ट्रैक का इंतज़ार है</string>
+    <string name="bit_perfect_status_unavailable">इस ट्रैक के लिए उपलब्ध नहीं (%1$s)</string>
+    <string name="diwali_title">Tunes की ओर से दीपावली की शुभकामनाएँ</string>
+    <string name="diwali_subtitle">रोशनी का यह त्योहार आपके घर को खुशियों से और आपके दिनों को संगीत से भर दे।</string>
+    <string name="diwali_cta">चलो जश्न मनाएँ</string>
+    <!-- Strings added with BitChord v1.9.1, translated for Tunes 3.2.0. -->
+    <string name="automix_overview">Automix अवलोकन</string>
 </resources>

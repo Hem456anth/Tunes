@@ -53,11 +53,19 @@ update can install over existing installs.
   `-x lintVitalProdRelease -x lintVitalAnalyzeProdRelease -x lintVitalReportProdRelease`.
 - A release build takes about 12–16 minutes on the owner's sandbox.
 
+### Build snags seen in sandboxes (18 Nov 2026)
+- `compileSdk = 37`: the SDK repository names the platform `android-37.0`, which AGP 8.10 doesn't
+  match to `android-37` ("Failed to find target with hash string"). Android Studio installs work;
+  in a bare sandbox, test-compile against 36 locally (and skip `check*AarMetadata`), never commit it.
+- Native build: CMake fetches Oboe (GitHub archive) and libusb (GitHub release) at configure time.
+  Where GitHub archive downloads are blocked, clone Oboe 1.11.0 and pass
+  `-DFETCHCONTENT_SOURCE_DIR_OBOE=<dir>` as a local CMake argument.
+
 ### Debugging
 - Log tags still say `BitChord` (e.g. `adb logcat -s BitChord`), on purpose.
 - The `dev` flavor installs beside the `prod` one. The `benchmark` build type is for checking R8
   and startup.
-- `betaSuffix` in `app/build.gradle.kts` marks sideloaded betas (`3.1.2-beta1`) so the updater
+- `betaSuffix` in `app/build.gradle.kts` marks sideloaded betas (`3.2.0-beta1`) so the updater
   still offers the final release. Leave it empty for releases.
 - Stats for nerds (in the player) shows the stream, codec and source in use.
 
@@ -102,8 +110,8 @@ setup (Caddy and systemd units).
   Uses `LASTFM_API_KEY` and `LASTFM_SECRET` secrets. Unverified (TASKS T-02).
 
 ## Releasing the Android app
-1. Raise `versionCode` in `app/build.gradle.kts` (now 7). Change `versionName` only with the
-   owner's OK (now 3.1.2).
+1. Raise `bitchordVersionCode` in the root `build.gradle.kts` (now 8). Change
+   `bitchordVersionName` only with the owner's OK (now 3.2.0).
 2. Build `:app:assembleProdRelease` with the Tunes key. Check the signature:
    `apksigner verify --print-certs <apk>` must show the SHA-256 above.
 3. Add an entry to CHANGELOG.md and the README "What's new" section.

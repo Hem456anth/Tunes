@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.music.bitchord.R
+import com.music.bitchord.data.settings.AppFont
 
 // Tunes blue (the logomark's #1388FF → #0652FF). Replaces the old red in the
 // spots that want one fixed accent regardless of theme (Replay's rank badge).
@@ -69,8 +70,36 @@ val SFProDisplay = FontFamily(
     Font(R.font.inter_heavy, FontWeight.W800),
 )
 
-// Heavy, tight typography — the backbone of the Apple Music look.
+/*
+ * Letter spacing measured off Apple Music's own screens: the spacing the
+ * bundled Display cut needs, at the weight it draws, to set a line to the
+ * width Apple sets it. Apple sets text under 20pt in SF Pro Text, which is
+ * spaced looser than Display, so the small sizes open up — about +0.25 to
+ * +0.4 at 12 to 14 — and the spacing closes as the size grows, to just under
+ * nothing for semibold titles at 18 to 24. The large titles had nothing to
+ * measure against and follow the same trend.
+ */
 private val BitChordTypography = Typography(
+    displayLarge = TextStyle(fontWeight = FontWeight.W800, fontSize = 34.sp, letterSpacing = (-0.5).sp),
+    headlineLarge = TextStyle(fontWeight = FontWeight.W800, fontSize = 30.sp, letterSpacing = (-0.4).sp),
+    headlineMedium = TextStyle(fontWeight = FontWeight.W700, fontSize = 22.sp, letterSpacing = (-0.25).sp),
+    titleLarge = TextStyle(fontWeight = FontWeight.W700, fontSize = 20.sp, letterSpacing = (-0.2).sp),
+    titleMedium = TextStyle(fontWeight = FontWeight.W600, fontSize = 16.sp, letterSpacing = 0.05.sp),
+    bodyLarge = TextStyle(fontWeight = FontWeight.W400, fontSize = 16.sp, letterSpacing = 0.2.sp),
+    bodyMedium = TextStyle(fontWeight = FontWeight.W400, fontSize = 14.sp, letterSpacing = 0.3.sp),
+    labelMedium = TextStyle(fontWeight = FontWeight.W600, fontSize = 12.sp, letterSpacing = 0.25.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.W600, fontSize = 11.sp, letterSpacing = 0.3.sp),
+).withFamily(SFProDisplay)
+
+/**
+ * The family [AppFont.LEGACY] draws in. Upstream keeps its first SF Pro mapping
+ * here; Tunes ships Inter only, so both settings use the same Inter cuts and
+ * differ only in the type scale.
+ */
+val SFProDisplayLegacy = SFProDisplay
+
+// Heavy, tight typography — the original scale [AppFont.LEGACY] restores.
+private val LegacyTypography = Typography(
     displayLarge = TextStyle(fontWeight = FontWeight.W800, fontSize = 34.sp, letterSpacing = (-0.8).sp),
     headlineLarge = TextStyle(fontWeight = FontWeight.W800, fontSize = 30.sp, letterSpacing = (-0.7).sp),
     headlineMedium = TextStyle(fontWeight = FontWeight.W700, fontSize = 22.sp, letterSpacing = (-0.4).sp),
@@ -80,7 +109,7 @@ private val BitChordTypography = Typography(
     bodyMedium = TextStyle(fontWeight = FontWeight.W400, fontSize = 14.sp),
     labelMedium = TextStyle(fontWeight = FontWeight.W600, fontSize = 12.sp),
     labelSmall = TextStyle(fontWeight = FontWeight.W600, fontSize = 11.sp),
-).withFamily(SFProDisplay)
+).withFamily(SFProDisplayLegacy)
 
 /** Applies [family] to every style in the scale, so nothing is left on Roboto. */
 private fun Typography.withFamily(family: FontFamily) = Typography(
@@ -104,11 +133,15 @@ private fun Typography.withFamily(family: FontFamily) = Typography(
 @Composable
 fun BitChordTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    font: AppFont = AppFont.DEFAULT,
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = BitChordTypography,
+        typography = when (font) {
+            AppFont.DEFAULT -> BitChordTypography
+            AppFont.LEGACY -> LegacyTypography
+        },
         content = content,
     )
 }

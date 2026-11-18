@@ -102,7 +102,7 @@ private const val TUNEMYMUSIC_URL = "https://www.tunemymusic.com/transfer"
 private const val SONGSHIFT_URL = "https://www.songshift.com/"
 
 /** The transfer's own pages, in the order a listener moves through them. */
-private enum class TransferStage { HOME, SPOTIFY_LOGIN, LOADING, PICK }
+private enum class TransferStage { HOME, LOADING, PICK }
 
 /**
  * Settings → Music Transfer.
@@ -116,6 +116,12 @@ private enum class TransferStage { HOME, SPOTIFY_LOGIN, LOADING, PICK }
 fun MusicTransferScreen(
     signedIn: Boolean,
     onSignIn: () -> Unit,
+    /**
+     * Opens Spotify's sign-in as the app's root overlay. Not drawn in this page:
+     * a WebView inside the page content is drawn twice by the glass backdrop
+     * (see SpotifyLoginScreen), which flickers and can crash.
+     */
+    onOpenSpotifyLogin: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -126,6 +132,9 @@ fun MusicTransferScreen(
     val scope = rememberCoroutineScope()
 
     var stage by rememberSaveable { mutableStateOf(TransferStage.HOME) }
+    // Set while the root sign-in overlay is up for this screen; the library
+    // loads as soon as the overlay stores the cookie.
+    var awaitingSpotify by rememberSaveable { mutableStateOf(false) }
     var destination by rememberSaveable {
         mutableStateOf(if (signedIn) TransferDestination.YOUTUBE_MUSIC else TransferDestination.ON_DEVICE)
     }
@@ -191,14 +200,14 @@ fun MusicTransferScreen(
         return
     }
 
+    LaunchedEffect(awaitingSpotify, spotifyCookie) {
+        if (awaitingSpotify && spotifyCookie.isNotBlank()) {
+            awaitingSpotify = false
+            load { TransferSources.spotifyLibrary() }
+        }
+    }
+
     when (stage) {
-        TransferStage.SPOTIFY_LOGIN -> SpotifyLogin(
-            modifier = modifier.padding(contentPadding),
-            onConnected = { token ->
-                AppSettings.setSpotifySpdcToken(token)
-                load { TransferSources.spotifyLibrary() }
-            },
-        )
         TransferStage.LOADING -> Box(modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator()
@@ -231,8 +240,12 @@ fun MusicTransferScreen(
             modifier = modifier,
             onSignIn = onSignIn,
             onSpotify = {
-                if (spotifyCookie.isBlank()) stage = TransferStage.SPOTIFY_LOGIN
-                else load { TransferSources.spotifyLibrary() }
+                if (spotifyCookie.isBlank()) {
+                    awaitingSpotify = true
+                    onOpenSpotifyLogin()
+                } else {
+                    load { TransferSources.spotifyLibrary() }
+                }
             },
             onSpotifyDisconnect = {
                 AppSettings.setSpotifySpdcToken("")

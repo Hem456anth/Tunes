@@ -10,6 +10,35 @@ Newest first. Dates are commit dates (`git log`). The user-facing summaries are 
 
 ## Android
 
+### 3.2.0: versionCode 8 (2026-11-18, not released yet)
+- **BitChord v1.9.1 merged** (upstream v1.8 → v1.9.1, 544 commits): bit-perfect output to USB DACs
+  (Android 14 USB mode, AAudio exclusive, direct USB driver) with a DAC volume HUD, music video
+  playback, YouTube Music podcasts (D-19), Direct Source Stream, Top Picks for You, the Automix mix
+  view, an offline player (device playlists, Liked, Folders, "Open with"), 24-bit FLAC over hi-res
+  Bluetooth and ALAC through FFmpeg, rebuilt downloads with "Keep playlists updated", sleep timer up
+  to 12 h, a redesigned player, menus and Settings, and one back stack for all pages (`AppNavigator`).
+- Kept from Tunes: branding, Inter, blue accent (the new local-folder delete actions are blue too),
+  backups off, updater on Hem456anth/Tunes, 3.0 Explore and Search, typed recent searches, Continue
+  from Chrome (`t=` seek, share adds `&t=`), stop on swipe-away, Music Transfer (now
+  `AppRoute.MusicTransfer`, using upstream's pinned `SpotifyLoginScreen`).
+- Upstream's SF Symbols icons replaced with Material icons, and the `Jetpack_SF_Symbols` dependency
+  dropped (D-20). Upstream's TV, Wear OS and web apps not merged (D-21).
+- New upstream strings say "Tunes" instead of "BitChord", except the addon-spec and tester-code
+  lines that refer to upstream. The image loader's User-Agent names Tunes (Wikimedia policy).
+- Version numbers moved to the root `build.gradle.kts` (upstream's layout).
+- Fixes found in the pre-PR audit:
+  - In-app updates: upstream's updater only takes release assets named `BitChord-…`; it now looks
+    for `Tunes-…` (`UPDATE_APK_PREFIX`), so `Tunes-3.2.0-arm64.apk` is found.
+  - Addon verification: upstream's auth service only vouches for the official BitChord package and
+    key, so it would always refuse Tunes after receiving this device's attestation chain. Tunes now
+    ships with no auth server and refuses locally, sending nothing (D-22).
+  - App icon picker hidden: upstream's alternate icons are BitChord art, mostly red (D-23).
+  - Music Transfer's Spotify sign-in opens as the app's root overlay, as upstream requires for that
+    WebView, instead of inside the page.
+  - Translations for the four strings upstream v1.9.1 left untranslated (`automix_overview`,
+    `diwali_*`) in 17 locales, so `LocaleStringsTest` passes again. Machine-quality; worth a native
+    speaker's look.
+
 ### 3.1.2: versionCode 7 (2026-10-19 / 20), released as GitHub `v3.1.2` on 2026-10-20
 - `7f5286f` **Music Transfer** (Settings → Music Transfer): Spotify account and links, Deezer,
   Apple Music, YouTube links, and CSV/TXT/M3U files, into YouTube Music or on-device playlists.

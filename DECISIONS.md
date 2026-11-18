@@ -9,9 +9,10 @@ without asking the owner. Add new decisions at the end with the date.
 source*. It shows "ad playing, your song is next" while an ad plays. YouTube Premium works through
 the embed's cookies. Neither app strips ad slots.
 
-### D-02 · The Android app is a fork of BitChord v1.8, not a rewrite (Oct 2026)
+### D-02 · The Android app is a fork of BitChord (v1.8, now v1.9.1), not a rewrite (Oct 2026)
 **Why:** it replaced two earlier approaches (a Capacitor wrapper, a native v2 app) and gets BitChord's
-full player. Moving from v1.5.1 to v1.8 brought in 353 non-merge upstream commits.
+full player. Moving from v1.5.1 to v1.8 brought in 353 non-merge upstream commits, and v1.8 to
+v1.9.1 (18 Nov 2026) another 544.
 **What it means:** upstream merges happen in a separate worktree with upstream history (this repo has
 its own unrelated history). Keep Tunes changes small and isolated so merges stay cheap.
 
@@ -54,8 +55,9 @@ this through future upstream merges.
 continues only when the setting is off or an Android Auto/AAOS controller is connected
 (`TaskRemovalPolicy`).
 
-### D-09 · The version stays 3.1.2 (20 Oct 2026)
-The owner said "v3.1.2 only". Music Transfer shipped as 3.1.2 with versionCode 7. Ask before
+### D-09 · Version numbers (20 Oct 2026, updated 18 Nov 2026)
+The owner said "v3.1.2 only", so Music Transfer shipped as 3.1.2 with versionCode 7. On 18 Nov 2026
+the owner approved 3.2.0 (versionCode 8) for the BitChord v1.9.1 merge. Ask before
 raising `versionName`. `versionCode` must always increase.
 
 ### D-10 · Music Transfer uses only public data and the user's own sign-ins (20 Oct 2026)
@@ -103,3 +105,35 @@ built and signed locally with the Tunes key.
 ### D-18 · GPL-3.0 everywhere
 Every dependency must be GPL-3.0 compatible. BitChord stays in the README Credits. A distributed
 build must come with its source.
+
+### D-19 · YouTube Music podcasts on Android (18 Nov 2026)
+**Why:** the owner chose to keep upstream v1.9's podcast playback when merging, to close a gap with
+other clients. **What it means:** the old "podcasts in the extension only" rule is retired. The
+Android app plays YouTube Music podcast shows; the extension keeps its own Apple/fyyd/RSS directory.
+
+### D-20 · No Apple SF Symbols (18 Nov 2026)
+**Why:** upstream v1.9 draws its settings and menu icons from Apple's SF Symbols (the
+`Jetpack_SF_Symbols` port). Apple licenses them only for apps on its own platforms, the same reason
+SF Pro was removed (D-03). **What it means:** `ui/icons/SfIcons.kt` keeps upstream's object and
+member names but maps each to a Material Symbols Rounded icon (Apache-2.0). `BrokenHeart` is cut
+from the Material heart. Keep the names so later upstream merges stay small.
+
+### D-21 · Phone app only: no TV, Wear OS or web app (18 Nov 2026)
+**Why:** the owner chose to merge the phone app first. Upstream's TV app bundles Google Sans and a
+Minecraft font, the Wear OS app SF Pro, and `web/` is upstream's own site. **What it means:**
+`settings.gradle.kts` includes only `:shared`, `:sharedUi` and `:app`. `wearos/protocol/` stays
+because the phone app compiles `WearProtocol.kt`. The Wear OS settings row only shows when a watch
+is connected, and Tunes bundles no watch APK, so installing onto a watch won't work yet.
+
+### D-22 · No addon verification service (18 Nov 2026)
+**Why:** upstream v1.9 added `AddonAuth`: for addons that ask, the app attests its hardware key to
+upstream's auth service, which only vouches for the official BitChord package and signing key. It
+would always refuse Tunes, after receiving the device's attestation chain. **What it means:**
+`ADDON_AUTH_SERVER` defaults to empty and `AddonAuth.attest()` refuses locally. Addons that require
+BitChord auth don't work in Tunes; all other addons are unaffected.
+
+### D-23 · App icon picker hidden (18 Nov 2026)
+**Why:** upstream's alternate launcher icons (glass, neon, monochrome) are BitChord art, mostly red,
+which clashes with the Tunes icon and blue accent (D-04). **What it means:** `AppIcon.PICKER_ENABLED`
+is false, so Settings doesn't offer them; only the Tunes icon (`LauncherDefault`) is enabled. Turn it
+on when Tunes has its own variants (TASKS I-07).

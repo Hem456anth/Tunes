@@ -40,8 +40,11 @@ the desktop app (it bundled SF Pro), but kept the source-set layout so upstream 
 |---|---|
 | `MainActivity.kt` | The single activity. Tabs (Listen Now, Explore, Library, Search), navigation, settings sub-screens (`settingsSubScreen`, e.g. `"music_transfer"`), deep links through `playback/MusicLink.kt` |
 | `BitChordApplication.kt` | Application class (the name is kept on purpose, see DECISIONS D-05) |
+| `ui/navigation/AppNavigator.kt` | One back stack for every page over the tabs (`AppRoute`: Settings and its pages, Music Transfer, Replay, …); release pages are interleaved from `MainViewModel.detailStack` |
 | `ui/MainViewModel.kt` | Screen state, search, library and recent searches (`recordQuery`) |
 | `ui/screens/*` | Android-only screens: Settings (`SettingsSheet.kt`), Sources, Equalizer, Music Transfer, Listen Together, Discord, Spotify library, Local music, History, Account |
+| `ui/icons/SfIcons.kt` | Settings and menu icons by meaning; Material icons in Tunes (upstream uses SF Symbols, D-20) |
+| `wear/*` | Phone side of upstream's Wear OS app (Data Layer bridge, installer). No watch APK is bundled in Tunes (D-21) |
 | `ui/player/*`, `ui/components/*`, `ui/theme/*` | Android player host, lyrics share card, glass and backdrop effects, theme |
 | `playback/PlaybackService.kt` | Media3 `MediaLibraryService`: two ExoPlayers (for crossfade), media session, Android Auto browse tree, notification, cast, party sync |
 | `playback/*` | Queue (`QueueCoordinator`, `QueueHistory`, `QueueShuffle`), crossfade, `AudioCache`, `QualityUpgrade`, `Autoplay`, `SleepTimer`, `TaskRemovalPolicy`, `PartySync`, DSP processors (EQ, loudness, spatial, transition filter) |

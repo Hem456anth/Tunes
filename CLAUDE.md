@@ -23,8 +23,8 @@ the other root docs:
 It is one repository with three deliverables:
 
 1. **Android app** (`app/`, `shared/`, `sharedUi/`, `native/`): Kotlin, Jetpack Compose, Media3.
-   It is a fork of [BitChord](https://github.com/kushagrasinghx/BitChord) v1.8 with Tunes branding
-   and features. Package `app.tunes.music`, version **3.1.2 (versionCode 7)**.
+   It is a fork of [BitChord](https://github.com/kushagrasinghx/BitChord) v1.9.1 with Tunes branding
+   and features. Package `app.tunes.music`, version **3.2.0 (versionCode 8)**.
 2. **Tunes for Chrome** (`extension/`): a Manifest V3 side-panel player, React 18 + TypeScript +
    Vite 5. Version **1.3.1**.
 3. **Listen Together server** (`backend/`): Go, WebSocket, in-memory, no database. Inherited from
@@ -34,9 +34,9 @@ It is one repository with three deliverables:
 
 - **Never block, skip or mute YouTube ads**, in either app. The extension's `adFreeOnly` setting only
   skips songs that have no ad-free source. See DECISIONS.md D-01.
-- **Don't change versionName past what the owner asked for.** The owner asked for "v3.1.2 only", so
-  new Android work so far has raised only `versionCode` (in `app/build.gradle.kts`). Ask before
-  you bump `versionName`. `versionCode` must always go up.
+- **Don't change versionName past what the owner asked for.** The owner approved 3.2.0 for the
+  v1.9.1 merge. Both numbers live in the root `build.gradle.kts` (`bitchordVersionCode`,
+  `bitchordVersionName`). Ask before you bump `versionName`. `versionCode` must always go up.
 - **Never rename the Kotlin package `com.music.bitchord`**, identifiers, string keys, log tags,
   SharedPreferences names (`bitchord_*`), native library names or server URLs. The prebuilt JNI
   symbols are named `Java_com_music_bitchord_*`, the encrypted prefs file names are part of the
@@ -46,7 +46,7 @@ It is one repository with three deliverables:
   `extension/THIRD_PARTY_NOTICES.md`. BitChord stays credited in README Credits (GPL attribution).
 - **Keep the 3.0 Explore and Search on Android** (`sharedUi/.../ui/screens/ExploreScreen.kt`,
   `SearchScreen.kt`, `MainViewModel.recordQuery`). If you merge upstream BitChord again, don't let
-  its v1.8 redesign of those two screens back in. (D-07)
+  its redesign of those two screens back in. (D-07)
 - **Extension: never open tabs for playback.** Audio plays in the offscreen document. The only tab
   the extension opens is `sidepanel.html?mode=tab`, when the user asks for it.
 - **Extension menus stay essential.** Use a heart for likes (not a star). Don't add Apple Music-style
@@ -57,7 +57,12 @@ It is one repository with three deliverables:
   updates won't install over older versions.
 - **Every dependency must be GPL-3.0 compatible.**
 - **Don't put the Apple SF Pro fonts back**: they can't be redistributed. Use Inter (`Inter-OFL.txt`).
-- **Podcasts are in the extension only.** The Android app has none.
+- **Podcasts:** the Android app has YouTube Music podcasts since 3.2.0 (from upstream v1.9, D-19).
+  The extension keeps its own podcast directory (Apple, fyyd, RSS).
+- **No Apple SF Symbols.** Upstream draws its icons from them; Tunes maps `SfIcons` to Material
+  icons instead (D-20). Don't add the `Jetpack_SF_Symbols` dependency back.
+- **Phone app only.** Upstream's `:tv` and `:wearos` apps and `web/` site are not merged (D-21).
+  Keep `wearos/protocol/` (the phone app compiles `WearProtocol.kt` from it).
 
 ## How to work here
 

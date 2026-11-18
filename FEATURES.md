@@ -3,7 +3,7 @@
 Status: ✅ shipped · 🧪 shipped, but the live path isn't verified · ❌ not built.
 Only what exists in the code is listed here. User-facing summaries are in README.md.
 
-## Android app (3.1.2)
+## Android app (3.2.0)
 
 ### Added or changed by Tunes
 | Feature | Status | Code |
@@ -17,9 +17,10 @@ Only what exists in the code is listed here. User-facing summaries are in README
 | Continue from Chrome: `t=` in YouTube Music links seeks; player share adds `&t=` | ✅ | `playback/MusicLink.kt`, `MainActivity.kt`, `HandoffLinkTest` |
 | 3.0 Explore (sectioned two-column mood grid) and 3.0 Search (text suggestions, typed recent searches as `q:` entities) | ✅ | `sharedUi/.../ExploreScreen.kt`, `SearchScreen.kt`, `MainViewModel.recordQuery` |
 | Swiping away from Recents stops playback (setting, default on; Android Auto keeps playing) | ✅ | `playback/TaskRemovalPolicy.kt`, `PlaybackService.stopForDismissal()`, `TaskRemovalPolicyTest` |
+| Material icons in place of upstream's Apple SF Symbols (D-20) | ✅ | `ui/icons/SfIcons.kt`, `BrokenHeart.kt` |
 | Music Transfer: Spotify account, Spotify/Deezer/Apple Music/YouTube links, CSV/TXT/M3U into YouTube Music or on-device playlists; resumable, retries, duplicate skip and merge, manual Find | 🧪 | `data/transfer/*`, `ui/screens/MusicTransferScreen.kt`, `MusicTransferTest`, `docs/music-transfer.md` |
 
-### Inherited from BitChord v1.8 (kept)
+### Inherited from BitChord (v1.8, and v1.9.1 since 3.2.0)
 YouTube Music search, browse and playback. Google sign-in. Hi-Res lossless from configured module
 or addon sources. Gapless playback with 0–12 s crossfade. Automix (beta). Offline downloads with tags.
 Local files, SMB and WebDAV. Word-synced lyrics from many providers, with translation and
@@ -28,8 +29,13 @@ Auto. Chromecast. Equalizer. Per-network quality. Speed. Skip silence. Sleep tim
 Last.fm and ListenBrainz scrobbling. Discord Rich Presence. Listen Together. Spotify playlists and
 Liked Songs. Playlist reorder. Backup export and import (`data/stats/Backup.kt`).
 
+New with v1.9.1 (🧪, not yet tested on a device): bit-perfect USB DAC output and DAC volume HUD,
+music video playback, YouTube Music podcasts, Direct Source Stream, Top Picks for You, Automix mix
+view, offline player (device playlists, Liked, Folders, Open with), rebuilt downloads with "Keep
+playlists updated", single back stack (`ui/navigation/AppNavigator.kt`).
+
 ### Not in the Android app
-- ❌ Podcasts (extension only, by decision)
+- ❌ Android TV and Wear OS apps (upstream has them; not merged, D-21)
 - ❌ Desktop app (removed, see DECISIONS D-03)
 
 ## Chrome extension (1.3.1)

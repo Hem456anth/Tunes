@@ -1,5 +1,7 @@
 package com.music.bitchord.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyListScope
@@ -29,7 +31,12 @@ private object NoShelfRowChrome : ShelfRowChrome {
 
 val LocalShelfRowChrome = staticCompositionLocalOf<ShelfRowChrome> { NoShelfRowChrome }
 
-/** A sideways-scrolling shelf, in whatever the platform wraps one in — see [ShelfRowChrome]. */
+/** A sideways-scrolling shelf, in whatever the platform wraps one in — see [ShelfRowChrome].
+ *
+ * Snaps to each cell rather than stopping mid-card: a fling always settles with
+ * a column aligned to the leading edge instead of leaving items cut in half.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ShelfRow(
     contentPadding: PaddingValues,
@@ -44,6 +51,7 @@ fun ShelfRow(
             state = state,
             contentPadding = contentPadding,
             horizontalArrangement = horizontalArrangement,
+            flingBehavior = rememberSnapFlingBehavior(lazyListState = state),
             content = content,
         )
     }

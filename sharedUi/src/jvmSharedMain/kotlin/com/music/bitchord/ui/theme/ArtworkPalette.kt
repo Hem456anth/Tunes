@@ -55,8 +55,9 @@ data class ArtworkPalette(
      * A blur wide enough to lose the picture leaves the mean of what it
      * sampled, so a page that starts from this colour where the artwork stops
      * reads as that blur carrying on rather than as a second surface beginning.
-     * Lighter than [background]. A detail page is this colour, flat, all the
-     * way down.
+     * Lighter than [background]. An artist page is this colour, flat, all the
+     * way down under its photograph; a release page, whose sleeve sits in a
+     * frame rather than bleeding into the page, is [background] instead.
      */
     val wash: Color,
     /** Fill for the glass buttons and chips that sit on [background]. */
@@ -348,11 +349,14 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
             lightness = { it.coerceIn(0.62f, 0.78f) },
         ),
         onBackground = Color.White,
-        // Well above the grey the untinted screens use for secondary text. A
-        // tint is a *coloured* background, not a black one, so the contrast a
-        // dim grey has against black is not the contrast it has here — artist
-        // names were sinking into the wash on mid-toned sleeves.
-        onBackgroundVariant = Color.White.copy(alpha = 0.80f),
+        // A pale tint of the page's own hue rather than a translucent white —
+        // Apple Music's secondary lines are the sleeve's colour, lifted, so a
+        // blue record's credits read light blue on its blue page. Bright
+        // enough that it still clears contrast on [background].
+        onBackgroundVariant = dominant.withHsl(
+            saturation = { adaptedArtworkSaturation(it, minimum = 0.22f, maximum = 0.50f) },
+            lightness = { 0.80f },
+        ),
         divider = Color.White.copy(alpha = 0.12f),
     )
 } else {
@@ -374,7 +378,11 @@ private fun Seed.toPalette(dark: Boolean): ArtworkPalette = if (dark) {
             lightness = { it.coerceIn(0.30f, 0.44f) },
         ),
         onBackground = Color.Black,
-        onBackgroundVariant = Color.Black.copy(alpha = 0.70f),
+        // The same hue taken down rather than up, for the pale page.
+        onBackgroundVariant = dominant.withHsl(
+            saturation = { adaptedArtworkSaturation(it, minimum = 0.22f, maximum = 0.55f) },
+            lightness = { 0.34f },
+        ),
         divider = Color.Black.copy(alpha = 0.10f),
     )
 }

@@ -1,11 +1,14 @@
 package com.music.bitchord
 
 import android.media.AudioDeviceInfo
+import com.music.bitchord.data.sources.SourceConfig
 import com.music.bitchord.data.sources.addon.AddonManifest
+import com.music.bitchord.data.sources.addon.AddonQualityOption
 import com.music.bitchord.playback.audio.LosslessOutput
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,6 +54,34 @@ class AddonPolicyTest {
     }
 
     @Test
+    fun `quality options carry their labels and fall back to the value`() {
+        val m = manifest(
+            ""","settings":[{"key":"atmos","options":[{"value":"stereo"},{"value":"auto"}]},
+                {"key":"quality","options":[{"value":"max","label":"MAX"},{"value":"hires"},{"value":320,"label":{"odd":1}}]}]""",
+        )
+        assertEquals(
+            listOf(AddonQualityOption("max", "MAX"), AddonQualityOption("hires", "hires"), AddonQualityOption("320", "320")),
+            m.qualityOptions,
+        )
+    }
+
+    @Test
+    fun `a quality setting with nothing to choose between offers no options`() {
+        assertEquals(emptyList<AddonQualityOption>(), manifest("").qualityOptions)
+        assertEquals(
+            emptyList<AddonQualityOption>(),
+            manifest(""","settings":[{"key":"quality","options":[{"value":"max"},{"value":"max"},{"label":"no value"}]}]""").qualityOptions,
+        )
+    }
+
+    @Test
+    fun `a source stored before quality options existed still reads`() {
+        val stored = json.decodeFromString(SourceConfig.serializer(), """{"id":"a","kind":"ADDON","baseUrl":"https://x"}""")
+        assertEquals(emptyList<AddonQualityOption>(), stored.qualityOptions)
+        assertNull(stored.pickedQuality)
+    }
+
+    @Test
     fun `cables qualify whatever bluetooth is doing`() {
         for (type in listOf(
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
@@ -77,6 +108,22 @@ class AddonPolicyTest {
             assertFalse(codec, state.capable)
             assertEquals(codec, state.bluetoothCodec)
         }
+    }
+
+    @Test
+    fun `samsung qualifies only in uhq`() {
+        val a2dp = setOf(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+        for (codec in listOf("SSC UHQ", "Samsung UHQ")) {
+            assertTrue(codec, LosslessOutput.decide(a2dp, codec, 48_000).capable)
+        }
+        // Named for the family only: the rate is what tells UHQ apart.
+        for (codec in listOf("SSC", "Samsung Seamless Codec", "Samsung Scalable")) {
+            assertTrue(codec, LosslessOutput.decide(a2dp, codec, 96_000).capable)
+            assertFalse(codec, LosslessOutput.decide(a2dp, codec, 48_000).capable)
+            assertFalse(codec, LosslessOutput.decide(a2dp, codec, null).capable)
+        }
+        // A high rate alone proves nothing for anyone else's lossy codec.
+        assertFalse(LosslessOutput.decide(a2dp, "aptX Adaptive", 96_000).capable)
     }
 
     @Test

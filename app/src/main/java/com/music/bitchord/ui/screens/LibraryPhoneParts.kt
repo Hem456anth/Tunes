@@ -43,7 +43,7 @@ fun libraryLinks(): List<LibraryLink> {
     val smbShare by AppSettings.smbShare.collectAsStateWithLifecycle()
     val showCacheFolder by AppSettings.showCacheFolder.collectAsStateWithLifecycle()
     val spotifyConnected by AppSettings.spotifySpdcToken.collectAsStateWithLifecycle()
-    fun link(icon: ImageVector, title: String, subtitle: String, browseId: String) = LibraryLink(
+    fun link(title: String, subtitle: String, browseId: String, icon: ImageVector = deviceFolderIcon(browseId) ?: Icons.Rounded.Cloud) = LibraryLink(
         item = ShelfItem(
             title = title,
             subtitle = subtitle,
@@ -55,13 +55,11 @@ fun libraryLinks(): List<LibraryLink> {
     )
     return listOfNotNull(
         link(
-            Icons.Rounded.Download,
             stringResource(R.string.downloads),
             stringResource(R.string.downloaded_songs),
             "local:downloads",
         ),
         link(
-            Icons.Rounded.Folder,
             stringResource(R.string.local_music),
             stringResource(R.string.audio_files_on_device),
             "local:all",
@@ -69,20 +67,17 @@ fun libraryLinks(): List<LibraryLink> {
         // Opt-in from Settings → Storage: what the song cache is holding from
         // YouTube and JioSaavn. See [com.music.bitchord.playback.AudioCache.cachedSongs].
         link(
-            Icons.Rounded.Storage,
             stringResource(R.string.cached_songs),
             stringResource(R.string.cached_songs_subtitle),
             CACHE_FOLDER_BROWSE_ID,
         ).takeIf { showCacheFolder },
         // Only once set up in Sources; unconfigured, they'd just be dead ends.
         link(
-            Icons.Rounded.Cloud,
             stringResource(R.string.webdav),
             stringResource(R.string.webdav_subtitle),
             com.music.bitchord.data.webdav.WebDavConfig.BROWSE_ID,
         ).takeIf { webdavConfigured.isNotBlank() },
         link(
-            Icons.Rounded.Lan,
             stringResource(R.string.smb),
             stringResource(R.string.smb_subtitle),
             com.music.bitchord.data.smb.SmbConfig.BROWSE_ID,
@@ -90,7 +85,6 @@ fun libraryLinks(): List<LibraryLink> {
         // Only while signed in to Spotify in Settings → Accounts; it opens that
         // account's playlists rather than a browse page.
         link(
-            Icons.Rounded.Cloud,
             stringResource(R.string.spotify),
             stringResource(R.string.spotify_library_subtitle),
             SPOTIFY_BROWSE_ID,
@@ -122,6 +116,20 @@ fun libraryDeviceItems(downloadedReleases: List<SavedCollection>): List<ShelfIte
             browseId = Downloads.pageIdFor(release.id),
         )
     }
+}
+
+/**
+ * The glyph a device folder is drawn with — its row on the Library page, and
+ * the placeholder cover its own page opens on. Null for anything that isn't
+ * one of the folders.
+ */
+fun deviceFolderIcon(browseId: String): ImageVector? = when (browseId) {
+    "local:downloads" -> Icons.Rounded.Download
+    "local:all" -> Icons.Rounded.Folder
+    CACHE_FOLDER_BROWSE_ID -> Icons.Rounded.Storage
+    com.music.bitchord.data.webdav.WebDavConfig.BROWSE_ID -> Icons.Rounded.Cloud
+    com.music.bitchord.data.smb.SmbConfig.BROWSE_ID -> Icons.Rounded.Lan
+    else -> null
 }
 
 /** The Library row that opens the connected Spotify account; handled by the app, not a browse page. */

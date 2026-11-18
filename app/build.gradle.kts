@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.security.MessageDigest
 import java.io.FileInputStream
 
 plugins {
@@ -53,21 +54,24 @@ val listenTogetherServer: String = (
     ).trim().trimEnd('/')
 
 /*
- * Bump this by hand before cutting each sideloaded test build ("beta2",
- * "beta3", ...) and blank it out before cutting the real release. Marks the
- * versionName below as a pre-release: AppUpdateChecker.isNewer() treats any
- * "-suffix" as older than a clean release of the same number, so testers
- * still get the update prompt once the matching tag is actually published.
+ * The service that checks this app's hardware key attestation and issues addon
+ * tokens. See AddonAuth. Overridable for a staging deployment. A fork that
+ * points this at its own server gains nothing: addons only trust tokens signed
+ * by the official service's key.
  *
- * Applied to release builds as well as debug ones, and that is the whole
- * point of it. A sideloaded beta is a *release* build — signed with the real
- * key, installed over the real package — so leaving the marker off it is
- * exactly the case that strands a tester: their build calls itself 1.6.1,
- * the published 1.6.1 then matches it, isNewer() says no, and no prompt ever
- * comes. Blanking this line is the one step that turns a beta into a release,
- * so it is the one place to get right.
+ * Tunes: empty by default. Upstream's service only vouches for the official
+ * BitChord package and key, so it would always refuse Tunes after receiving
+ * this device's attestation chain. With no server, AddonAuth refuses locally
+ * and sends nothing.
  */
-val betaSuffix = ""
+val addonAuthServer: String = (
+    localProps.getProperty("ADDON_AUTH_SERVER")
+        ?: System.getenv("ADDON_AUTH_SERVER")
+        ?: ""
+    ).trim().trimEnd('/')
+
+// See the root build.gradle.kts: one version for the phone and its watch app.
+val betaSuffix = rootProject.extra["bitchordBetaSuffix"] as String
 
 android {
     namespace = "com.music.bitchord"
@@ -81,9 +85,8 @@ android {
         // Haze falls back to a translucent scrim below that.
         minSdk = 26
         targetSdk = 36
-        // versionCode only ever goes up (4 was Tunes 3.1.0, 3 was 3.0.x); same signing key.
-        versionCode = 7
-        versionName = "3.1.2"
+        versionCode = rootProject.extra["bitchordVersionCode"] as Int
+        versionName = rootProject.extra["bitchordVersionName"] as String
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -95,6 +98,15 @@ android {
             "LISTEN_TOGETHER_SERVER",
             "\"${listenTogetherServer.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
         )
+        buildConfigField(
+            "String",
+            "ADDON_AUTH_URL",
+            "\"${addonAuthServer.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+        )
+        // Which release assets are this app's: the phone and TV APKs ship in
+        // the same GitHub release, told apart by file name. See
+        // AppUpdateChecker.apkAssetUrl.
+        buildConfigField("String", "UPDATE_APK_PREFIX", "\"Tunes-\"") // Tunes release assets: Tunes-X.Y.Z-arm64.apk
     }
 
     splits {
@@ -117,6 +129,13 @@ android {
                 version = "3.22.1"
             }
         }
+    }
+
+    // The phone <-> watch protocol, one file shared with the watch app so the
+    // two cannot drift. See wearos/protocol/.../WearProtocol.kt. Tunes does not
+    // build the watch app itself, but the phone side still compiles against it.
+    sourceSets {
+        getByName("main") { java.srcDir("../wearos/protocol") }
     }
 
     // applicationId can only be overridden per flavor, not per build type, so a
@@ -176,6 +195,7 @@ android {
              * `benchmark` build type below before it ships.
              */
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -207,6 +227,8 @@ android {
         resources {
             // SMBJ's BouncyCastle and jspecify both ship this descriptor.
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            // The three BouncyCastle jars (bcprov, bcutil, bcpkix) ship one licence between them.
+            pickFirsts += setOf("META-INF/LICENSE.md", "META-INF/LICENSE.txt", "META-INF/NOTICE.md")
         }
     }
     buildFeatures {
@@ -291,6 +313,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     // ProcessLifecycleOwner: whether the app is on screen, for the open-app count.
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
+    // The scheduled check behind "Keep playlists updated"; see PlaylistSync.
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
@@ -325,6 +349,9 @@ dependencies {
     // ---- Images: Coil 3 + Palette (dominant colors for the mesh gradient) ----
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+    // Title logos are PNG, but artist signatures are usually SVG — without
+    // this Coil can't decode them (see ArtistSignatureRepository).
+    implementation("io.coil-kt.coil3:coil-svg:3.0.4")
     implementation("androidx.palette:palette-ktx:1.0.0")
 
     // ---- Frosted glass / progressive blur (Telegram-style bars) ----
@@ -406,6 +433,25 @@ dependencies {
     implementation("com.google.android.gms:play-services-cast-framework:22.2.0")
     implementation("androidx.mediarouter:mediarouter:1.8.1")
 
+    // ---- The watch app (wearos/): Data Layer state out, commands in ----
+    // See com.music.bitchord.wear.WearBridge. Rides on the Play services base
+    // the Cast framework already brings, so it adds very little.
+    implementation("com.google.android.gms:play-services-wearable:20.0.1")
+    // Opens the watch app after an update, so its install prompt is on screen.
+    implementation("androidx.wear:wear-remote-interactions:1.1.0")
+
+    // ---- "BitChord for Wear OS": the first install onto a watch ----
+    // Without the Play Store only ADB can install on a watch, so this phone is
+    // the ADB client, over the watch's Wireless debugging — see WatchInstaller.
+    // GPL-3.0/Apache-2.0 dual-licensed. Its own BouncyCastle (jdk15to18) is the
+    // same classes as the jdk18on one SMBJ already brings, so it is excluded;
+    // bcpkix supplies the certificate the ADB client identifies itself with.
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1") {
+        exclude(group = "org.bouncycastle")
+    }
+    implementation("org.conscrypt:conscrypt-android:2.5.3")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.85")
+
     testImplementation("junit:junit:4.13.2")
     // A real HTTP server for the addon tests. The addon protocol is entirely
     // "what does this app send, and what does it do with what comes back", and
@@ -450,3 +496,60 @@ val verifyDevInstall = tasks.register("verifyDevInstall") {
     }
 }
 tasks.matching { it.name == "installDevDebug" }.configureEach { finalizedBy(verifyDevInstall) }
+
+/*
+ * The watch app rides inside the phone app, so "BitChord for Wear OS" in
+ * Settings can put it on a watch — or update it — with no computer involved.
+ *
+ * Each phone variant carries the watch build of the same flavor *and* build
+ * type: the same package (dev with dev, prod with prod) and the same signing
+ * key, which is what the Wearable Data Layer needs before the two will talk at
+ * all. A SHA-256 travels with it, so the phone can tell the watch's build from
+ * the one it carries even when the version numbers match.
+ *
+ * Costs a watch build per phone build; -Pbitchord.bundleWear=false skips it
+ * for a quick local iteration (Settings then offers no install).
+ */
+abstract class BundleWearApk : DefaultTask() {
+    @get:InputFiles
+    abstract val apks: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun bundle() {
+        val out = outputDir.get().asFile.resolve("wear")
+        out.deleteRecursively()
+        out.mkdirs()
+        val apk = apks.asFileTree.matching { include("*.apk") }.files.singleOrNull()
+            ?: throw GradleException("Expected exactly one watch APK in ${apks.files}")
+        val target = out.resolve("BitChordWear.apk")
+        apk.copyTo(target, overwrite = true)
+        val digest = MessageDigest.getInstance("SHA-256")
+        target.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        out.resolve("BitChordWear.sha256").writeText(digest.digest().joinToString("") { "%02x".format(it) })
+    }
+}
+
+if (providers.gradleProperty("bitchord.bundleWear").orNull != "false" && findProject(":wearos") != null) {
+    androidComponents.onVariants { variant ->
+        val flavor = variant.productFlavors.firstOrNull { it.first == "env" }?.second ?: return@onVariants
+        val type = variant.buildType ?: return@onVariants
+        // The benchmark build has no watch counterpart.
+        if (type != "debug" && type != "release") return@onVariants
+        val cap = variant.name.replaceFirstChar { it.uppercase() }
+        val bundle = tasks.register<BundleWearApk>("bundleWearApk$cap") {
+            dependsOn(":wearos:assemble$cap")
+            apks.from(rootProject.layout.projectDirectory.dir("wearos/build/outputs/apk/$flavor/$type"))
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(bundle, BundleWearApk::outputDir)
+    }
+}
