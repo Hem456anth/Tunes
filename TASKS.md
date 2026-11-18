@@ -35,6 +35,12 @@ CHANGELOG.
 `backend/render.yaml` names the service `bitchord-listen-together`. It works as it is. Change it
 only if Tunes deploys its own server (and then update `LISTEN_TOGETHER_SERVER` too).
 
+### T-06 · P3 · `LocaleStringsTest` fails since the v1.9.1 merge (inherited from upstream)
+17 locales lack `automix_overview` and the three `diwali_*` strings (Hindi lacks only
+`automix_overview`). Upstream v1.9.1 has the same gap, so its own test fails too. Add the
+translations (or English copies) to each `values-*/strings.xml`. All other 1,264 app unit tests and
+the 122 `:shared:jvmTest` tests pass on the 3.2.0 branch (18 Nov 2026).
+
 ## Verification gaps (need a real device or network)
 
 - **V-05** 3.2.0 merge on a device: player, Settings, menus and icons (now Material), podcasts,
