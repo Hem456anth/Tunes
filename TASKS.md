@@ -37,6 +37,11 @@ only if Tunes deploys its own server (and then update `LISTEN_TOGETHER_SERVER` t
 
 ## Verification gaps (need a real device or network)
 
+- **V-05** 3.2.0 merge on a device: player, Settings, menus and icons (now Material), podcasts,
+  music videos, bit-perfect USB output, Music Transfer opening from Settings and its Spotify sign-in
+  (now upstream's `SpotifyLoginScreen`, which upstream says should be a root overlay, not page
+  content), the `t=` handoff and share position, swipe-away stop, Explore and Search (3.0).
+
 - **V-01** Music Transfer live paths: Spotify saved albums and followed artists (`SpotifyLibrary.albums()` and `artists()` in `data/spotify/SpotifyLibrary.kt`, called from `TransferSources.kt`), YouTube Music writes (like, create playlist, save album,
   subscribe), the on-device UI flow, and resuming after the app is killed.
 - **V-02** Extension lyric translation against the real `translate.googleapis.com`
@@ -53,9 +58,13 @@ only if Tunes deploys its own server (and then update `LISTEN_TOGETHER_SERVER` t
   The fix needs vite 8. Treat it as a separate upgrade task with a full UI retest.
 - **I-03** MusicBrainz: the owner rejected a "Song info panel". Ask what the owner actually wants
   (better search and pages, or song details and artwork) before building anything.
-- **I-04** Upstream BitChord moved past v1.8 (more than 200 commits after it by 17 Oct 2026). Any
-  merge happens in the owner's `tunes-fork` worktree, never in this repo (separate history). Keep
-  the 3.0 Explore and Search, the Tunes branding and the docs during the merge.
+- **I-04** Done for v1.9.1 (3.2.0). For the next upstream release, this repo has no common history
+  with upstream, so merge with an explicit base instead of `git merge`:
+  `git fetch --depth 1 upstream refs/tags/vOLD:refs/tags/up-vOLD refs/tags/vNEW:refs/tags/up-vNEW`,
+  then `git merge-tree --write-tree --merge-base=up-vOLD HEAD up-vNEW` and resolve. Keep the 3.0
+  Explore and Search, the Tunes branding, Inter, Material icons (D-20) and the docs.
+- **I-05** Android TV and Wear OS apps from upstream (D-21): swap their fonts (Google Sans,
+  Minecraft, SF Pro) for Inter, include `:tv`/`:wearos`, and bundle the watch APK.
 
 ## Next actionable steps for a new session
 

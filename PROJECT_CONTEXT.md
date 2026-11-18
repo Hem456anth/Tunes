@@ -11,7 +11,7 @@ closed unmerged, and Tunes became its own project at
 The Android side went through three approaches:
 1. A Capacitor wrapper around the extension UI.
 2. A native "v2" app.
-3. **The current one (3.x)**: a fork of the BitChord v1.8 Android app with Tunes branding. The first two are retired and not in this repo.
+3. **The current one (3.x)**: a fork of the BitChord Android app (v1.8, merged up to v1.9.1 in 3.2.0) with Tunes branding. The first two are retired and not in this repo.
 
 The owner works mostly in Chrome and uses the Android app on an Android phone. The project is
 personal and AI-assisted ("vibe-coded"), and the public description should stay modest about that.
@@ -20,7 +20,7 @@ personal and AI-assisted ("vibe-coded"), and the public description should stay 
 
 | Part | Version | State |
 |---|---|---|
-| Android app | 3.1.2, versionCode 7 | Released on GitHub as `v3.1.2` (20 Oct 2026). See TASKS T-01 for the asset name. |
+| Android app | 3.2.0, versionCode 8 | BitChord v1.9.1 merged on branch `upstream-v1.9.1` (18 Nov 2026), not released. Last release `v3.1.2` (20 Oct 2026, see TASKS T-01). |
 | Chrome extension | 1.3.1 | Code is in `extension/`. No zip is attached to any GitHub release (TASKS T-03). |
 | Listen Together server | inherited | The app's default server URL is `https://bitchord-listen-together.onrender.com` (upstream's). Tunes doesn't deploy its own. |
 
@@ -34,7 +34,7 @@ GitHub releases: `v3.0.0` (17 Oct), `v3.1.1` (18 Oct, arm64 APK), `v3.1.2` (20 O
   Spotify WebView pinned to `*.spotify.com`, the update checker on Hem456anth/Tunes, Continue from
   Chrome (`t=` links), the 3.0 Explore and Search kept, stop on swipe-away (`TaskRemovalPolicy`),
   and Music Transfer (`data/transfer/*`, `ui/screens/MusicTransferScreen.kt`).
-- Android, inherited from BitChord v1.8 and kept working: playback, downloads, Automix, lyrics,
+- Android, inherited from BitChord (v1.8, then v1.9.1 in 3.2.0) and kept working: playback, downloads, Automix, lyrics,
   Replay, widgets, Android Auto, scrobbling, Discord, local, SMB and WebDAV files, Spotify
   playlists, Chromecast, the equalizer and Listen Together.
 - Extension 1.2.0–1.3.1: reliability (timeouts, per-source deadlines), long playlists, friendly
