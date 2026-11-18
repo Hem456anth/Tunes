@@ -3647,7 +3647,8 @@ private fun BitChordApp(
                                         options = listOf(
                                             stringResource(R.string.search_source_youtube),
                                             stringResource(R.string.library),
-                                            stringResource(R.string.search_source_addons),
+                                            // Tunes: no Addons tab yet. The 3.0 SearchScreen (D-07)
+                                            // has no addon results list; see TASKS I-06.
                                         ),
                                         selectedIndex = searchSource.ordinal,
                                         onSelect = { index -> onSearchSourceChange(SearchSource.entries[index]) },
@@ -3655,20 +3656,6 @@ private fun BitChordApp(
                                 },
                                 searchingLibrary = searchSource == SearchSource.LIBRARY,
                                 libraryResults = libraryResults,
-                                searchingAddons = searchSource == SearchSource.ADDONS,
-                                addonResults = addonResults,
-                                isBlocked = { song ->
-                                    val configId = SourceRegistry.parseTrackKey(song.videoId)?.first
-                                    !SourceRegistry.permitsForPlayback(configId, addonCeiling)
-                                },
-                                onBlockedSongClick = { song -> blockedAddonSong = song },
-                                addonHistory =viewModel.addonSearchHistory.collectAsStateWithLifecycle().value,
-                                onAddonHistoryClick = { term ->
-                                    viewModel.onQueryChange(term)
-                                    viewModel.submitSearch()
-                                },
-                                onAddonHistoryRemove = viewModel::removeAddonSearch,
-                                onAddonHistoryClear = viewModel::clearAddonSearchHistory,
                                 // The same queue opening the Local Music folder and
                                 // tapping the row there would give.
                                 onLibrarySongClick = { songs, index ->

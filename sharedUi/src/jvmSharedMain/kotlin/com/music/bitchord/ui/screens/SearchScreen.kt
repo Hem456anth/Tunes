@@ -77,7 +77,6 @@ import com.music.bitchord.data.model.EntityType
 import com.music.bitchord.ui.components.MessageState
 import com.music.bitchord.ui.components.PAGE_GUTTER
 import com.music.bitchord.ui.components.RowMoreButton
-import com.music.bitchord.ui.components.PlayingAccent
 import com.music.bitchord.ui.components.ROW_DIVIDER_INSET
 import com.music.bitchord.ui.components.SearchField
 import com.music.bitchord.ui.components.SongRow
@@ -888,3 +887,10 @@ private fun SearchFilterTabs(filter: SearchFilter, onFilterChange: (SearchFilter
 
 /** Rounded, but well short of a capsule — the corner reads as a cut, not a curve. */
 private val FILTER_PILL_SHAPE = RoundedCornerShape(12.dp)
+
+/**
+ * The accent a current song's title takes in the 3.0 search results. Upstream
+ * dropped the shared `PlayingAccent` in v1.9; Tunes keeps the 3.0 Search (D-07),
+ * so the colour lives here now.
+ */
+private val PlayingAccent = Color(0xFFFB4A62)

@@ -63,6 +63,9 @@ only if Tunes deploys its own server (and then update `LISTEN_TOGETHER_SERVER` t
   `git fetch --depth 1 upstream refs/tags/vOLD:refs/tags/up-vOLD refs/tags/vNEW:refs/tags/up-vNEW`,
   then `git merge-tree --write-tree --merge-base=up-vOLD HEAD up-vNEW` and resolve. Keep the 3.0
   Explore and Search, the Tunes branding, Inter, Material icons (D-20) and the docs.
+- **I-06** Upstream v1.9's Addons search tab (search configured addon sources, with blocked-quality
+  rows) is not wired in: the 3.0 SearchScreen (D-07) has no addon results list, so the tab was left
+  out of the switcher in `MainActivity`. Port the list into the 3.0 screen if the owner wants it.
 - **I-05** Android TV and Wear OS apps from upstream (D-21): swap their fonts (Google Sans,
   Minecraft, SF Pro) for Inter, include `:tv`/`:wearos`, and bundle the watch APK.
 
