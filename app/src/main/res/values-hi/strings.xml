@@ -1460,4 +1460,6 @@
     <string name="diwali_title">Tunes की ओर से दीपावली की शुभकामनाएँ</string>
     <string name="diwali_subtitle">रोशनी का यह त्योहार आपके घर को खुशियों से और आपके दिनों को संगीत से भर दे।</string>
     <string name="diwali_cta">चलो जश्न मनाएँ</string>
+    <!-- Strings added with BitChord v1.9.1, translated for Tunes 3.2.0. -->
+    <string name="automix_overview">Automix अवलोकन</string>
 </resources>

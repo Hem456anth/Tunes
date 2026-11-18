@@ -53,6 +53,14 @@ update can install over existing installs.
   `-x lintVitalProdRelease -x lintVitalAnalyzeProdRelease -x lintVitalReportProdRelease`.
 - A release build takes about 12–16 minutes on the owner's sandbox.
 
+### Build snags seen in sandboxes (18 Nov 2026)
+- `compileSdk = 37`: the SDK repository names the platform `android-37.0`, which AGP 8.10 doesn't
+  match to `android-37` ("Failed to find target with hash string"). Android Studio installs work;
+  in a bare sandbox, test-compile against 36 locally (and skip `check*AarMetadata`), never commit it.
+- Native build: CMake fetches Oboe (GitHub archive) and libusb (GitHub release) at configure time.
+  Where GitHub archive downloads are blocked, clone Oboe 1.11.0 and pass
+  `-DFETCHCONTENT_SOURCE_DIR_OBOE=<dir>` as a local CMake argument.
+
 ### Debugging
 - Log tags still say `BitChord` (e.g. `adb logcat -s BitChord`), on purpose.
 - The `dev` flavor installs beside the `prod` one. The `benchmark` build type is for checking R8

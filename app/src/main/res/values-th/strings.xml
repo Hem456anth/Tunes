@@ -1440,4 +1440,9 @@
     <string name="bit_perfect_status_inexact">%1$s · ไม่ตรงทุกบิต: แหล่งนี้ไม่ใช่ PCM แบบไม่สูญเสียคุณภาพ</string>
     <string name="bit_perfect_status_waiting">กำลังรอแทร็กแบบไม่สูญเสียคุณภาพบนเอาต์พุตที่รองรับ</string>
     <string name="bit_perfect_status_unavailable">ไม่พร้อมใช้งานสำหรับแทร็กนี้ (%1$s)</string>
+    <!-- Strings added with BitChord v1.9.1, translated for Tunes 3.2.0. -->
+    <string name="automix_overview">ภาพรวม Automix</string>
+    <string name="diwali_title">Tunes ขอให้คุณมีความสุขในเทศกาลดิวาลี</string>
+    <string name="diwali_subtitle">ขอให้เทศกาลแห่งแสงนี้เติมเต็มบ้านของคุณด้วยความสุข และทุกวันของคุณด้วยเสียงเพลง</string>
+    <string name="diwali_cta">มาฉลองกัน</string>
 </resources>

@@ -270,6 +270,9 @@ object AddonAuth {
 
     private suspend fun attest(): Session = withContext(Dispatchers.IO) {
         val base = BuildConfig.ADDON_AUTH_URL
+        // Tunes ships without an auth service (see app/build.gradle.kts): refuse
+        // here rather than send this device's attestation anywhere.
+        if (base.isBlank()) throw AttestRefused("Tunes has no addon verification service")
         val started = System.currentTimeMillis()
         val challenge = json.decodeFromString<ChallengeResponse>(call(Request.Builder().url("$base/v1/challenge").build()))
         // NTP-style midpoint: the proof's timestamp is checked against the addon's

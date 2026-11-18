@@ -58,11 +58,16 @@ val listenTogetherServer: String = (
  * tokens. See AddonAuth. Overridable for a staging deployment. A fork that
  * points this at its own server gains nothing: addons only trust tokens signed
  * by the official service's key.
+ *
+ * Tunes: empty by default. Upstream's service only vouches for the official
+ * BitChord package and key, so it would always refuse Tunes after receiving
+ * this device's attestation chain. With no server, AddonAuth refuses locally
+ * and sends nothing.
  */
 val addonAuthServer: String = (
     localProps.getProperty("ADDON_AUTH_SERVER")
         ?: System.getenv("ADDON_AUTH_SERVER")
-        ?: "https://bitchord-auth.kushagrasingh.in"
+        ?: ""
     ).trim().trimEnd('/')
 
 // See the root build.gradle.kts: one version for the phone and its watch app.
@@ -101,7 +106,7 @@ android {
         // Which release assets are this app's: the phone and TV APKs ship in
         // the same GitHub release, told apart by file name. See
         // AppUpdateChecker.apkAssetUrl.
-        buildConfigField("String", "UPDATE_APK_PREFIX", "\"BitChord-\"")
+        buildConfigField("String", "UPDATE_APK_PREFIX", "\"Tunes-\"") // Tunes release assets: Tunes-X.Y.Z-arm64.apk
     }
 
     splits {

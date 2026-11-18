@@ -124,3 +124,16 @@ Minecraft font, the Wear OS app SF Pro, and `web/` is upstream's own site. **Wha
 `settings.gradle.kts` includes only `:shared`, `:sharedUi` and `:app`. `wearos/protocol/` stays
 because the phone app compiles `WearProtocol.kt`. The Wear OS settings row only shows when a watch
 is connected, and Tunes bundles no watch APK, so installing onto a watch won't work yet.
+
+### D-22 · No addon verification service (18 Nov 2026)
+**Why:** upstream v1.9 added `AddonAuth`: for addons that ask, the app attests its hardware key to
+upstream's auth service, which only vouches for the official BitChord package and signing key. It
+would always refuse Tunes, after receiving the device's attestation chain. **What it means:**
+`ADDON_AUTH_SERVER` defaults to empty and `AddonAuth.attest()` refuses locally. Addons that require
+BitChord auth don't work in Tunes; all other addons are unaffected.
+
+### D-23 · App icon picker hidden (18 Nov 2026)
+**Why:** upstream's alternate launcher icons (glass, neon, monochrome) are BitChord art, mostly red,
+which clashes with the Tunes icon and blue accent (D-04). **What it means:** `AppIcon.PICKER_ENABLED`
+is false, so Settings doesn't offer them; only the Tunes icon (`LauncherDefault`) is enabled. Turn it
+on when Tunes has its own variants (TASKS I-07).

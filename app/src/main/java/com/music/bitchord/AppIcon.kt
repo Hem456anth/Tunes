@@ -43,6 +43,13 @@ enum class AppIcon(val alias: String, val iconRes: Int, val labelRes: Int, val p
         ComponentName(context.packageName, "com.music.bitchord.$alias")
 
     companion object {
+        /**
+         * Tunes: whether Settings offers the icon picker. Off because the bundled
+         * variants are upstream BitChord art; only [Default] (the Tunes icon) is
+         * enabled in the manifest. Turn on once Tunes ships its own variants.
+         */
+        const val PICKER_ENABLED = false
+
         fun current(context: Context): AppIcon {
             val pm = context.packageManager
             return entries.firstOrNull {

@@ -3119,6 +3119,7 @@ private fun BitChordApp(
                                     navigator.clear()
                                     webSession = WebSessionMode.SIGN_IN
                                 },
+                                onOpenSpotifyLogin = { showSpotifyLogin = true },
                                 contentPadding = listPadding,
                             )
                         } else if (pageRoute == AppRoute.EqualizerPresets) {

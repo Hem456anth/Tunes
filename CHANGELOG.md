@@ -26,6 +26,18 @@ Newest first. Dates are commit dates (`git log`). The user-facing summaries are 
 - New upstream strings say "Tunes" instead of "BitChord", except the addon-spec and tester-code
   lines that refer to upstream. The image loader's User-Agent names Tunes (Wikimedia policy).
 - Version numbers moved to the root `build.gradle.kts` (upstream's layout).
+- Fixes found in the pre-PR audit:
+  - In-app updates: upstream's updater only takes release assets named `BitChord-…`; it now looks
+    for `Tunes-…` (`UPDATE_APK_PREFIX`), so `Tunes-3.2.0-arm64.apk` is found.
+  - Addon verification: upstream's auth service only vouches for the official BitChord package and
+    key, so it would always refuse Tunes after receiving this device's attestation chain. Tunes now
+    ships with no auth server and refuses locally, sending nothing (D-22).
+  - App icon picker hidden: upstream's alternate icons are BitChord art, mostly red (D-23).
+  - Music Transfer's Spotify sign-in opens as the app's root overlay, as upstream requires for that
+    WebView, instead of inside the page.
+  - Translations for the four strings upstream v1.9.1 left untranslated (`automix_overview`,
+    `diwali_*`) in 17 locales, so `LocaleStringsTest` passes again. Machine-quality; worth a native
+    speaker's look.
 
 ### 3.1.2: versionCode 7 (2026-10-19 / 20), released as GitHub `v3.1.2` on 2026-10-20
 - `7f5286f` **Music Transfer** (Settings → Music Transfer): Spotify account and links, Deezer,
